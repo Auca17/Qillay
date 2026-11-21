@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qillay · Pagar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Archivo:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cobalt: #1f3b8f;
+  --cobalt-deep: #142a6b;
+  --sun: #f2b31b;
+  --tomato: #d63a2c;
+  --leaf: #2f8a4c;
+  --paper: #f7f5ef;
+  --ink: #1b1e2b;
+  --ink-soft: #4a4f63;
+  --slat: #d7b98c;
+  --slat-alt: #cfae7f;
+  --slat-gap: #a9835a;
+  --rule: #c9c2b2;
+  --display: 'Alfa Slab One', 'Rockwell', serif;
+  --ui: 'Archivo', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--ui);
+  color: var(--ink);
+  background:
+    repeating-linear-gradient(180deg, var(--slat) 0 86px, var(--slat-alt) 86px 170px, var(--slat-gap) 170px 174px);
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+}
+::selection { background: var(--sun); color: var(--cobalt-deep); }
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; border-radius: 4px; }
+
+.crate { width: min(980px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 0; align-items: end; }
+.label, .label-inner { min-width: 0; }
+
+/* The label: a lithographed marquilla glued to the crate */
+.label {
+  background: var(--cobalt);
+  padding: 12px;
+  border-radius: 6px;
+  box-shadow: 0 18px 40px -18px rgba(40, 25, 5, .55), 0 2px 0 rgba(255, 255, 255, .25) inset;
+  position: relative;
+}
+.label-inner {
+  background: var(--paper);
+  border: 2px solid var(--cobalt);
+  outline: 1px solid var(--sun);
+  outline-offset: -7px;
+  border-radius: 3px;
+  padding: 26px 32px 28px;
+}
+.ribbon {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--sun);
+  color: var(--cobalt-deep);
+  margin: -26px -32px 22px;
+  padding: 10px 32px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  border-bottom: 2px solid var(--cobalt);
+}
+.ribbon .store { display: flex; align-items: center; gap: 8px; text-transform: capitalize; }
+.ribbon .order { font-variant-numeric: tabular-nums; font-weight: 500; }
+.demo-tag { font-size: 13px; font-weight: 500; color: var(--cobalt-deep); }
+
+h1 { margin: 0; font-family: var(--display); font-weight: 400; color: var(--cobalt); font-size: clamp(56px, 9vw, 96px); line-height: .95; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.lead { margin: 10px 0 0; color: var(--ink-soft); font-size: 17px; }
+
+/* Split as a segmented stub (boarding-pass discipline) */
+.stub { display: flex; margin: 22px 0 0; border: 1.5px dashed var(--cobalt); border-radius: 4px; }
+.stub-part { flex: 1; padding: 10px 14px; font-variant-numeric: tabular-nums; }
+.stub-part + .stub-part { border-left: 1.5px dashed var(--cobalt); }
+.stub-part b { display: block; font-size: 18px; color: var(--ink); }
+.stub-part span { font-size: 14px; color: var(--ink-soft); }
+.stub-part .back { color: var(--leaf); font-weight: 700; }
+
+fieldset { border: 0; padding: 0; margin: 26px 0 0; }
+legend { font-weight: 700; font-size: 18px; margin-bottom: 10px; color: var(--cobalt-deep); }
+.methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); gap: 10px; }
+.method { position: relative; }
+.method input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.method label {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; min-height: 56px;
+  background: #fff; border: 1.5px solid var(--rule); border-radius: 4px;
+  font-weight: 500; cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.method label:hover { border-color: var(--cobalt); }
+.method input:checked + label { border-color: var(--cobalt); background: #e9edf8; box-shadow: 0 0 0 2px var(--cobalt) inset; }
+.method input:focus-visible + label { outline: 3px solid var(--sun); outline-offset: 2px; }
+.icon { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; color: var(--cobalt); }
+
+.qr { display: none; align-items: center; gap: 18px; margin-top: 16px; padding: 14px; border: 1.5px solid var(--rule); border-radius: 4px; background: #fff; }
+.qr.on { display: flex; }
+.qr svg { width: 132px; height: 132px; flex: none; }
+.qr p { margin: 0; color: var(--ink-soft); font-size: 15px; max-width: 32ch; }
+
+.actions { margin-top: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pay {
+  font: 700 20px/1 var(--ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--paper); background: var(--cobalt);
+  border: 0; border-radius: 4px; padding: 18px 28px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 10px;
+  box-shadow: 0 6px 14px -6px rgba(20, 42, 107, .7);
+  transition: background .15s, transform .15s;
+}
+.pay:hover { background: var(--cobalt-deep); }
+.pay:active { transform: translateY(1px); }
+.pay .icon { color: var(--sun); }
+.hint { color: var(--ink-soft); font-size: 15px; }
+.error { color: var(--tomato); font-weight: 500; min-height: 1.4em; margin: 10px 0 0; }
+
+/* MouseKey gate */
+.gate, .result { display: none; margin-top: 24px; padding: 18px 20px; border-radius: 4px; }
+.gate.on, .result.on { display: block; }
+.gate { background: #fff7df; border: 1.5px solid var(--sun); }
+.gate h2, .result h2 { margin: 0 0 6px; font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.gate h2 { color: var(--cobalt-deep); display: flex; align-items: center; gap: 10px; }
+.gate p, .result p { margin: 0; color: var(--ink-soft); max-width: 60ch; }
+.meter { margin-top: 14px; height: 18px; border: 2px solid var(--cobalt); border-radius: 3px; background: var(--paper); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: repeating-linear-gradient(135deg, var(--sun) 0 10px, #f6c64a 10px 20px); transition: width .12s ease-out; }
+
+.result.ok { background: #e7f3ea; border: 1.5px solid var(--leaf); }
+.result.ok h2 { color: var(--leaf); }
+.result.no { background: #fbe9e6; border: 1.5px solid var(--tomato); }
+.result.no h2 { color: #b3261b; }
+.result .row { display: flex; align-items: center; gap: 14px; }
+.stamp { width: 64px; height: 64px; flex: none; }
+.result.ok > p { margin-left: 78px; }
+.receipt { margin-top: 10px; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 500; }
+.again { margin-top: 14px; font: 600 16px var(--ui); background: transparent; color: #b3261b; border: 1.5px solid #b3261b; border-radius: 4px; padding: 10px 16px; cursor: pointer; }
+
+.foot { grid-column: 1 / -1; justify-self: center; margin: 18px 0 0; color: #2a1c0a; background: rgba(247, 245, 239, .72); padding: 6px 12px; border-radius: 4px; font-size: 14px; text-align: center; }
+.foot b { font-weight: 700; }
+
+/* Mascot: the crate cat */
+.cat-wrap { align-self: end; margin-left: -28px; position: relative; z-index: 1; }
+.cat { width: 240px; height: auto; display: block; overflow: visible; }
+.cat .tail { transform-origin: 150px 196px; transition: transform .3s ease-out; }
+.cat.is-shaking .tail { animation: wag .28s ease-in-out infinite alternate; }
+.cat .ears-sad, .cat .eyes-happy, .cat .eyes-sad, .cat .mouth-happy, .cat .mouth-sad { display: none; }
+.cat.is-happy .eyes-open, .cat.is-sad .eyes-open, .cat.is-happy .mouth-idle, .cat.is-sad .mouth-idle { display: none; }
+.cat.is-happy .eyes-happy, .cat.is-happy .mouth-happy { display: inline; }
+.cat.is-sad .eyes-sad, .cat.is-sad .mouth-sad { display: inline; }
+.cat.is-sad .ear { transform: rotate(var(--droop)); }
+.cat .ear { transition: transform .35s cubic-bezier(.19, 1, .22, 1); transform-box: fill-box; transform-origin: 50% 100%; }
+.cat.is-happy { animation: hop .5s cubic-bezier(.19, 1, .22, 1) 2; }
+.bubble {
+  position: absolute; right: 14px; bottom: 230px; width: 190px;
+  background: var(--paper); color: var(--ink); border: 2px solid var(--cobalt); border-radius: 6px;
+  padding: 10px 12px; font-size: 14px; font-weight: 500; line-height: 1.35;
+}
+.bubble::after { content: ''; position: absolute; right: 42px; bottom: -10px; width: 16px; height: 16px; background: var(--paper); border-right: 2px solid var(--cobalt); border-bottom: 2px solid var(--cobalt); transform: rotate(45deg); }
+@keyframes wag { from { transform: rotate(-14deg); } to { transform: rotate(16deg); } }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } }
+
+@media (max-width: 760px) {
+  .crate { grid-template-columns: 1fr; }
+  .cat-wrap { order: -1; margin: 0 auto -18px; }
+  .cat { width: 160px; }
+  .bubble { position: static; width: auto; margin: 0 0 8px; }
+  .bubble::after { display: none; }
+  .label-inner { padding: 22px 18px 22px; }
+  .ribbon { margin: -22px -18px 18px; padding: 10px 18px; flex-wrap: wrap; }
+  .stub { flex-direction: column; }
+  .result.ok > p { margin-left: 0; }
+  .stamp { width: 44px; height: 44px; }
+  .result .row { align-items: flex-start; }
+  .stub-part + .stub-part { border-left: 0; border-top: 1.5px dashed var(--cobalt); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat.is-shaking .tail, .cat.is-happy { animation: none; }
+  .meter i, .cat .ear { transition: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5h16v1a2.7 2.7 0 0 1-5.3 0 2.7 2.7 0 0 1-5.4 0 2.7 2.7 0 0 1-5.3 0z"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 15h4"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="3.5" y="14.5" width="6" height="6" rx="1"/><path d="M14.5 14.5h2.5v2.5M20.5 14.5v6h-3M14.5 20.5v-2"/></symbol>
+  <symbol id="i-mouse" viewBox="0 0 24 24"><rect x="6.5" y="3" width="11" height="18" rx="5.5"/><path d="M12 3v6"/><path d="M6.5 9h11"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/></symbol>
+</svg>
+
+<main class="crate">
+  <section class="label" aria-labelledby="total">
+    <div class="label-inner">
+      <div class="ribbon">
+        <span class="store"><svg class="icon" aria-hidden="true"><use href="#i-store"/></svg><span id="store">Carrefour</span></span>
+        <span class="order">Pedido <span id="order">ORD-DEMO</span></span>
+      </div>
+
+      <h1 id="total">$ 85.000</h1>
+      <p class="lead" id="lead">Total de tu pedido para retirar. <span class="demo-tag">Pago de prueba: no se cobra nada.</span></p>
+
+      <div class="stub" id="stub" hidden></div>
+
+      <form id="form" novalidate>
+        <fieldset>
+          <legend>¿Cómo pagás?</legend>
+          <div class="methods" id="methods"></div>
+        </fieldset>
+
+        <div class="qr" id="qr" aria-live="polite">
+          <svg id="qr-code" viewBox="0 0 25 25" role="img" aria-label="Código QR de prueba de Mercado Pago"></svg>
+          <p><b>QR de prueba.</b> En la caja lo escanearías con Mercado Pago. Acá alcanza con tocar Pagar y pasar el MouseKey.</p>
+        </div>
+
+        <p class="error" id="error" role="alert"></p>
+
+        <div class="actions">
+          <button class="pay" id="pay" type="submit">
+            <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+            <span id="pay-label">Pagar $ 85.000</span>
+          </button>
+          <span class="hint">Protegido con MouseKey: sin mouse no hay pago.</span>
+        </div>
+      </form>
+
+      <div class="gate" id="gate" aria-live="polite">
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-mouse"/></svg>Sacudí el mouse</h2>
+        <p>Movelo de un lado a otro hasta llenar la barra. El gato tiene que ver que es un mouse de verdad.</p>
+        <div class="meter" role="progressbar" aria-label="MouseKey" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="meter"><i id="meter-fill"></i></div>
+      </div>
+
+      <div class="result ok" id="ok" aria-live="polite">
+        <div class="row">
+          <svg class="stamp" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="none" stroke="#2f8a4c" stroke-width="3"/><circle cx="32" cy="32" r="23" fill="#2f8a4c"/><path d="m21 33 7 7 15-16" fill="none" stroke="#f7f5ef" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div>
+            <h2>Pago aprobado</h2>
+            <p id="ok-text">Pagaste $ 85.000.</p>
+          </div>
+        </div>
+        <p class="receipt" id="receipt"></p>
+        <p>Pago de prueba: no se cobró nada.</p>
+      </div>
+
+      <div class="result no" id="no" aria-live="assertive">
+        <div class="row">
+          <svg class="stamp" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="none" stroke="#d63a2c" stroke-width="3"/><circle cx="32" cy="32" r="23" fill="#d63a2c"/><path d="m23 23 18 18M41 23 23 41" fill="none" stroke="#f7f5ef" stroke-width="4.5" stroke-linecap="round"/></svg>
+          <div>
+            <h2>Pago rechazado</h2>
+            <p id="no-text">No detectamos un mouse.</p>
+          </div>
+        </div>
+        <button class="again" id="again" type="button">Probar de nuevo</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="cat-wrap">
+    <p class="bubble" id="bubble" aria-live="polite">Hola, soy Cuyano. Yo apruebo los pagos, pero solo si veo un mouse.</p>
+    <svg class="cat" id="cat" viewBox="0 0 220 250" role="img" aria-label="Cuyano, el gato de Qillay">
+      <!-- crate the cat sits on -->
+      <rect x="18" y="204" width="184" height="42" rx="3" fill="#b8854d"/>
+      <path d="M18 218h184M18 232h184" stroke="#8f6232" stroke-width="2"/>
+      <rect x="18" y="204" width="184" height="42" rx="3" fill="none" stroke="#6f4a22" stroke-width="2.5"/>
+      <!-- tail -->
+      <g class="tail"><path d="M150 196c30-4 46-28 40-54-3-14-16-16-18-6 6 20-6 38-26 44" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5" stroke-linejoin="round"/><path d="M186 150c-3 2-5 6-4 10M176 176c-4 1-7 4-8 8" stroke="#b86b1f" stroke-width="3" stroke-linecap="round" fill="none"/></g>
+      <!-- body -->
+      <path d="M62 204c-6-44 8-78 48-80 40 2 54 36 48 80z" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M88 204c-2-28 6-46 22-46s24 18 22 46z" fill="#f6e3bf"/>
+      <path d="M70 160c8 2 12 8 12 14M150 160c-8 2-12 8-12 14M66 184c8 0 12 4 14 10M154 184c-8 0-12 4-14 10" stroke="#b86b1f" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+      <!-- paws -->
+      <ellipse cx="92" cy="204" rx="13" ry="7" fill="#f6e3bf" stroke="#6f4a22" stroke-width="2.5"/>
+      <ellipse cx="128" cy="204" rx="13" ry="7" fill="#f6e3bf" stroke="#6f4a22" stroke-width="2.5"/>
+      <!-- ears -->
+      <g class="ear" style="--droop:-38deg"><path d="M66 70 60 24l38 24z" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5" stroke-linejoin="round"/><path d="M69 58 66 36l18 12z" fill="#e88b7a"/></g>
+      <g class="ear" style="--droop:38deg"><path d="M154 70l6-46-38 24z" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5" stroke-linejoin="round"/><path d="m151 58 3-22-18 12z" fill="#e88b7a"/></g>
+      <!-- head -->
+      <ellipse cx="110" cy="84" rx="54" ry="46" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5"/>
+      <path d="M98 42c2 8 2 14 0 20M110 40v22M122 42c-2 8-2 14 0 20" stroke="#b86b1f" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+      <ellipse cx="110" cy="104" rx="26" ry="18" fill="#f6e3bf"/>
+      <!-- eyes: open (pupils follow the pointer) -->
+      <g class="eyes-open">
+        <ellipse cx="88" cy="82" rx="12" ry="13" fill="#fff" stroke="#6f4a22" stroke-width="2"/>
+        <ellipse cx="132" cy="82" rx="12" ry="13" fill="#fff" stroke="#6f4a22" stroke-width="2"/>
+        <g id="pupils"><ellipse cx="88" cy="83" rx="5" ry="7.5" fill="#1b1e2b"/><ellipse cx="132" cy="83" rx="5" ry="7.5" fill="#1b1e2b"/><circle cx="90" cy="79" r="1.8" fill="#fff"/><circle cx="134" cy="79" r="1.8" fill="#fff"/></g>
+      </g>
+      <g class="eyes-happy" fill="none" stroke="#1b1e2b" stroke-width="3.5" stroke-linecap="round"><path d="M77 84c5-8 17-8 22 0M121 84c5-8 17-8 22 0"/></g>
+      <g class="eyes-sad"><ellipse cx="88" cy="86" rx="12" ry="9" fill="#fff" stroke="#6f4a22" stroke-width="2"/><ellipse cx="132" cy="86" rx="12" ry="9" fill="#fff" stroke="#6f4a22" stroke-width="2"/><circle cx="88" cy="89" r="5" fill="#1b1e2b"/><circle cx="132" cy="89" r="5" fill="#1b1e2b"/><path d="M75 76l24 4M145 76l-24 4" stroke="#6f4a22" stroke-width="3" stroke-linecap="round"/></g>
+      <!-- nose, mouths, whiskers -->
+      <path d="M104 97h12l-6 7z" fill="#d96a5a" stroke="#6f4a22" stroke-width="1.5" stroke-linejoin="round"/>
+      <path class="mouth-idle" d="M110 104c0 6-6 9-11 7M110 104c0 6 6 9 11 7" fill="none" stroke="#6f4a22" stroke-width="2.2" stroke-linecap="round"/>
+      <path class="mouth-happy" d="M97 106c4 10 22 10 26 0z" fill="#b5413a" stroke="#6f4a22" stroke-width="2" stroke-linejoin="round"/>
+      <path class="mouth-sad" d="M100 114c5-6 15-6 20 0" fill="none" stroke="#6f4a22" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M80 102 56 98M80 108l-24 4M140 102l24-4M140 108l24 4" stroke="#6f4a22" stroke-width="1.6" stroke-linecap="round"/>
+      <!-- a tiny price tag collar -->
+      <path d="M84 126c16 7 36 7 52 0" fill="none" stroke="#1f3b8f" stroke-width="5" stroke-linecap="round"/>
+      <rect x="102" y="128" width="16" height="13" rx="2" fill="#f2b31b" stroke="#1f3b8f" stroke-width="2"/>
+      <text x="110" y="138.5" text-anchor="middle" font-family="Alfa Slab One, serif" font-size="9" fill="#1f3b8f">$</text>
+    </svg>
+  </div>
+
+  <p class="foot"><b>MouseKey</b> es parte del chiste de la demo de Qillay: el gato solo aprueba pagos hechos con un mouse. Datos de ejemplo.</p>
+</main>
+
+<script>
+(() => {
+  // Demo data comes from the URL so the chat bot can link here: ?total=85000&store=carrefour&order=ORD-1&split=modo-bna:40000,mercado-pago:45000
+  const WALLETS = [
+    { id: 'modo-bna', label: 'MODO + Banco Nación', pct: 30, icon: 'i-card' },
+    { id: 'mercado-pago', label: 'Mercado Pago', pct: 15, icon: 'i-card' },
+    { id: 'naranja-x', label: 'Naranja X', pct: 20, icon: 'i-card' },
+    { id: 'macro', label: 'Banco Macro', pct: 25, icon: 'i-card' },
+    { id: 'mp-qr', label: 'QR de Mercado Pago', icon: 'i-qr', qr: true }
+  ];
+  const STORES = { carrefour: 'Carrefour', vea: 'Vea', jumbo: 'Jumbo' };
+  const SHAKES_NEEDED = 12;
+  const GATE_TIMEOUT_MS = 15000;
+
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const total = Math.max(0, Number(params.get('total')) || 85000);
+  const storeId = (params.get('store') || 'carrefour').toLowerCase();
+  const orderId = (params.get('order') || 'ORD-DEMO').slice(0, 24);
+  const split = (params.get('split') || '')
+    .split(',').map(s => s.split(':')).filter(p => p.length === 2 && Number(p[1]) > 0)
+    .map(([id, amount]) => ({ wallet: WALLETS.find(w => w.id === id), amount: Number(amount) })).filter(p => p.wallet);
+
+  const ars = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n).replace(/ /g, ' ');
+
+  $('total').textContent = ars(total);
+  $('pay-label').textContent = 'Pagar ' + ars(total);
+  $('store').textContent = STORES[storeId] || storeId;
+  $('order').textContent = orderId;
+
+  if (split.length) {
+    const stub = $('stub');
+    stub.hidden = false;
+    stub.innerHTML = split.map(p => {
+      const back = p.wallet.pct ? Math.round(p.amount * p.wallet.pct / 100) : 0;
+      return `<div class="stub-part"><b>${ars(p.amount)}</b><span>con ${p.wallet.label}</span>${back ? `<br><span class="back">te devuelven hasta ${ars(back)}</span>` : ''}</div>`;
+    }).join('');
+  }
+
+  const recommended = split[0] ? split[0].wallet.id : null;
+  $('methods').innerHTML = WALLETS.map(w => `
+    <div class="method">
+      <input type="radio" name="method" id="m-${w.id}" value="${w.id}" ${w.id === recommended ? 'checked' : ''}>
+      <label for="m-${w.id}"><svg class="icon" aria-hidden="true"><use href="#${w.icon}"/></svg>${w.label}</label>
+    </div>`).join('');
+
+  // Fake QR: finder squares plus a deterministic pattern from the order id. Not scannable on purpose.
+  (function drawQr() {
+    let seed = [...orderId].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const rand = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296;
+    const finder = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="#1b1e2b"/><rect x="${x + 1}" y="${y + 1}" width="5" height="5" fill="#fff"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3" fill="#1b1e2b"/>`;
+    const inFinder = (x, y) => (x < 8 && y < 8) || (x > 16 && y < 8) || (x < 8 && y > 16);
+    let cells = '';
+    for (let y = 0; y < 25; y++) for (let x = 0; x < 25; x++) if (!inFinder(x, y) && rand() > .52) cells += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+    $('qr-code').innerHTML = `<rect width="25" height="25" fill="#fff"/><g fill="#1b1e2b">${cells}</g>${finder(0, 0)}${finder(18, 0)}${finder(0, 18)}`;
+  })();
+
+  const methodValue = () => (document.querySelector('input[name=method]:checked') || {}).value;
+  const syncQr = () => $('qr').classList.toggle('on', methodValue() === 'mp-qr');
+  $('methods').addEventListener('change', () => { $('error').textContent = ''; syncQr(); });
+  syncQr();
+
+  // The cat: pupils follow any pointer; only a mouse can unlock payment.
+  const cat = $('cat');
+  const pupils = $('pupils');
+  const say = text => { $('bubble').textContent = text; };
+  window.addEventListener('pointermove', e => {
+    const r = cat.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height * .33);
+    const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 300);
+    pupils.setAttribute('transform', `translate(${(dx / d) * 5 * k} ${(dy / d) * 4 * k})`);
+  }, { passive: true });
+
+  let state = 'idle', flips = 0, lastSign = 0, lastMoveAt = 0, gateTimer = 0, decayTimer = 0;
+  const setCat = mood => { cat.classList.remove('is-shaking', 'is-happy', 'is-sad'); if (mood) cat.classList.add(mood); };
+  const show = id => ['gate', 'ok', 'no'].forEach(k => $(k).classList.toggle('on', k === id));
+  const notify = (status, extra) => { try { window.parent.postMessage({ type: 'qillay:payment', status, orderId, total, method: methodValue(), ...extra }, '*'); } catch (_) {} };
+
+  function setMeter(v) {
+    const pct = Math.round(Math.min(1, v) * 100);
+    $('meter-fill').style.width = pct + '%';
+    $('meter').setAttribute('aria-valuenow', String(pct));
+  }
+
+  function reject(reason) {
+    clearTimeout(gateTimer); clearInterval(decayTimer);
+    state = 'rejected';
+    const text = reason === 'timeout'
+      ? 'No sentimos la sacudida a tiempo. MouseKey necesita ver el mouse moviéndose de un lado a otro.'
+      : 'No detectamos un mouse. MouseKey solo aprueba pagos hechos con un mouse: conectá uno y probá de nuevo.';
+    $('no-text').textContent = text;
+    show('no'); setCat('is-sad');
+    say(reason === 'timeout' ? 'Me aburrí esperando. Sacudilo más fuerte.' : 'Sin mouse no hay pago. Son las reglas de la casa.');
+    $('pay').disabled = false;
+    notify('rejected', { reason });
+  }
+
+  function approve() {
+    clearTimeout(gateTimer); clearInterval(decayTimer);
+    state = 'approved';
+    const m = WALLETS.find(w => w.id === methodValue());
+    const receipt = 'QLY-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+    $('ok-text').textContent = `Pagaste ${ars(total)} con ${m ? m.label : 'tu billetera'}. Retirás el pedido ${orderId} en ${STORES[storeId] || storeId}.`;
+    $('receipt').textContent = 'Comprobante ' + receipt;
+    show('ok'); setCat('is-happy');
+    say('Eso sí era un mouse. Pago aprobado.');
+    $('form').hidden = true;
+    notify('approved', { receipt });
+  }
+
+  function openGate() {
+    state = 'gate'; flips = 0; lastSign = 0; setMeter(0);
+    show('gate'); setCat('is-shaking');
+    say('A ver ese mouse. Sacudilo.');
+    gateTimer = setTimeout(() => state === 'gate' && reject('timeout'), GATE_TIMEOUT_MS);
+    decayTimer = setInterval(() => {
+      if (state === 'gate' && performance.now() - lastMoveAt > 700 && flips > 0) { flips = Math.max(0, flips - 1); setMeter(flips / SHAKES_NEEDED); }
+    }, 250);
+  }
+
+  window.addEventListener('pointermove', e => {
+    if (state !== 'gate') return;
+    if (e.pointerType !== 'mouse') return reject('no-mouse');
+    const dx = e.movementX || 0;
+    if (Math.abs(dx) < 4) return;
+    const sign = Math.sign(dx);
+    lastMoveAt = performance.now();
+    if (sign !== lastSign) { if (lastSign !== 0) flips++; lastSign = sign; }
+    setMeter(flips / SHAKES_NEEDED);
+    if (flips >= SHAKES_NEEDED) approve();
+  }, { passive: true });
+  window.addEventListener('pointerdown', e => { if (state === 'gate' && e.pointerType !== 'mouse') reject('no-mouse'); });
+
+  let lastPointerType = '';
+  $('pay').addEventListener('pointerdown', e => { lastPointerType = e.pointerType; });
+
+  $('form').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!methodValue()) { $('error').textContent = 'Elegí cómo pagás para seguir.'; return; }
+    $('error').textContent = '';
+    const hasFinePointer = window.matchMedia('(any-pointer: fine)').matches;
+    // Touch or pen, or a device with no fine pointer at all: no mouse, no payment.
+    if (!hasFinePointer || (lastPointerType && lastPointerType !== 'mouse')) { lastPointerType = ''; return reject('no-mouse'); }
+    lastPointerType = '';
+    $('pay').disabled = true;
+    openGate();
+  });
+
+  // Rehearsal / screenshots: ?preview=gate|approved|rejected renders a state without a mouse.
+  const preview = params.get('preview');
+  if (preview === 'gate') openGate(), setMeter(.55), clearTimeout(gateTimer);
+  if (preview === 'approved') approve();
+  if (preview === 'rejected') reject('no-mouse');
+
+  $('again').addEventListener('click', () => {
+    state = 'idle'; show(null); setCat(null); setMeter(0);
+    say('Dale, otra vez. Esta vez con mouse.');
+    $('pay').focus();
+  });
+})();
+</script>
+</body>
+</html>
