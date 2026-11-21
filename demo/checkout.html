@@ -199,7 +199,7 @@ legend { font-weight: 700; font-size: 18px; margin-bottom: 10px; color: var(--co
   <section class="label" aria-labelledby="total">
     <div class="label-inner">
       <div class="ribbon">
-        <span class="store"><svg class="icon" aria-hidden="true"><use href="#i-store"/></svg><span id="store">Carrefour</span></span>
+        <span class="store"><svg class="icon" aria-hidden="true"><use href="#i-store"/></svg><span id="store">Vea</span></span>
         <span class="order">Pedido <span id="order">ORD-DEMO</span></span>
       </div>
 
@@ -310,22 +310,25 @@ legend { font-weight: 700; font-size: 18px; margin-bottom: 10px; color: var(--co
 
 <script>
 (() => {
-  // Demo data comes from the URL so the chat bot can link here: ?total=85000&store=carrefour&order=ORD-1&split=modo-bna:40000,mercado-pago:45000
+  // Demo data comes from the URL so the chat bot can link here, with amounts in pesos:
+  // ?total=85000&store=vea&order=QY-1A2B3C4D&split=modo_bna:40000,mercado_pago:45000
+  // Wallets mirror SAMPLE_WALLETS in mcp-server/src/wallets.ts (same ids, percentages and caps in pesos).
   const WALLETS = [
-    { id: 'modo-bna', label: 'MODO + Banco Nación', pct: 30, icon: 'i-card' },
-    { id: 'mercado-pago', label: 'Mercado Pago', pct: 15, icon: 'i-card' },
-    { id: 'naranja-x', label: 'Naranja X', pct: 20, icon: 'i-card' },
-    { id: 'macro', label: 'Banco Macro', pct: 25, icon: 'i-card' },
-    { id: 'mp-qr', label: 'QR de Mercado Pago', icon: 'i-qr', qr: true }
+    { id: 'modo_bna', label: 'MODO + Banco Nación', pct: 30, cap: 12000, icon: 'i-card' },
+    { id: 'naranja_x', label: 'Naranja X', pct: 25, cap: 8000, icon: 'i-card' },
+    { id: 'banco_macro', label: 'Banco Macro', pct: 20, cap: 10000, icon: 'i-card' },
+    { id: 'mercado_pago', label: 'Mercado Pago', pct: 10, cap: 5000, icon: 'i-card' },
+    { id: 'mp_qr', label: 'QR de Mercado Pago', icon: 'i-qr', qr: true }
   ];
-  const STORES = { carrefour: 'Carrefour', vea: 'Vea', jumbo: 'Jumbo' };
+  // Mirrors STORE_INFO names in mcp-server/src/sources.ts.
+  const STORES = { jumbo: 'Jumbo', disco: 'Disco', vea: 'Vea', carrefour: 'Carrefour', dia: 'DIA', changomas: 'ChangoMás', coto: 'Coto', vital: 'Vital' };
   const SHAKES_NEEDED = 12;
   const GATE_TIMEOUT_MS = 15000;
 
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const total = Math.max(0, Number(params.get('total')) || 85000);
-  const storeId = (params.get('store') || 'carrefour').toLowerCase();
+  const storeId = (params.get('store') || 'vea').toLowerCase();
   const orderId = (params.get('order') || 'ORD-DEMO').slice(0, 24);
   const split = (params.get('split') || '')
     .split(',').map(s => s.split(':')).filter(p => p.length === 2 && Number(p[1]) > 0)
@@ -342,7 +345,7 @@ legend { font-weight: 700; font-size: 18px; margin-bottom: 10px; color: var(--co
     const stub = $('stub');
     stub.hidden = false;
     stub.innerHTML = split.map(p => {
-      const back = p.wallet.pct ? Math.round(p.amount * p.wallet.pct / 100) : 0;
+      const back = p.wallet.pct ? Math.min(p.wallet.cap, Math.floor(p.amount * p.wallet.pct / 100)) : 0;
       return `<div class="stub-part"><b>${ars(p.amount)}</b><span>con ${p.wallet.label}</span>${back ? `<br><span class="back">te devuelven hasta ${ars(back)}</span>` : ''}</div>`;
     }).join('');
   }
@@ -366,7 +369,7 @@ legend { font-weight: 700; font-size: 18px; margin-bottom: 10px; color: var(--co
   })();
 
   const methodValue = () => (document.querySelector('input[name=method]:checked') || {}).value;
-  const syncQr = () => $('qr').classList.toggle('on', methodValue() === 'mp-qr');
+  const syncQr = () => $('qr').classList.toggle('on', methodValue() === 'mp_qr');
   $('methods').addEventListener('change', () => { $('error').textContent = ''; syncQr(); });
   syncQr();
 
