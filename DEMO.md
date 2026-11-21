@@ -47,7 +47,9 @@ Dale, comprá las opciones que recomendaste.
 
 ## MouseKey (Cuyano the cat)
 
-The "Comprar" button of the cart view (in Grok with MCP Apps, and on the `/cart` page) is guarded by MouseKey:
+With the Grok script above, Grok buys first and then sends the `cart_url` link. That link opens on "Confirmá tu pago" with Cuyano: press "Confirmar pago" and shake the mouse over the box until the bar fills; then "Pedido confirmado" appears with the order. The order already exists on the server; MouseKey guards what the page shows.
+
+The "Comprar" button of the cart view (in Grok with MCP Apps, and on the `/cart` page before buying) is guarded the same way, and the user is not asked twice:
 
 - Click "Comprar" with a mouse: Cuyano asks you to shake it left and right over the cart until the bar fills (15 s limit). Then it confirms the purchase.
 - From a phone, a tablet or a pen: rejected ("Sin mouse no hay pago").
