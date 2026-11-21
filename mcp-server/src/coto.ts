@@ -1,5 +1,5 @@
 import { amount, fetchJson, isRecord, records, text, type Json } from './http';
-import { cents, listPrice, type Product } from './product';
+import { cents, type Product } from './product';
 
 const BASE = 'https://www.coto.com.ar';
 
@@ -30,7 +30,7 @@ function toProduct(group: Json): Product[] {
             brand: first(attributes['product.brand']),
             ean: first(attributes['product.eanPrincipal']),
             price_cents: cents(price),
-            list_price_cents: cents(listPrice(price, amount(first(attributes['sku.referencePrice'])))),
+            // sku.referencePrice is the price per litre or kilo, not a list price, so it is not used.
             image_url: first(attributes['product.mediumImage.url']),
             url: productUrl(group.detailsAction)
         }

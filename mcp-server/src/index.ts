@@ -1,14 +1,29 @@
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 
+import { APP_HTML, APP_MIME, APP_UI_META, APP_URI } from './app';
 import { cardsPage, cardsUrl } from './cards';
+import { addItem, clearCart, getCart, newCartId, removeItem } from './cart';
 import { errorMessage } from './http';
 import { comparePrice, listBranches } from './precios-claros';
+import { previewPage } from './preview';
 import { DEFAULT_STORES, searchProducts, STORE_IDS } from './sources';
 import { SAMPLE_WALLETS, splitPayment, WEEKDAYS } from './wallets';
 
+// Tools that render in the MCP Apps view; the flat key is the pre-GA spelling some hosts still read.
+const APP_TOOL_META = { ui: { resourceUri: APP_URI }, 'ui/resourceUri': APP_URI };
+
 function ok(result: unknown) {
     return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+}
+
+// Same data as text (for the model and text-only hosts) and as structuredContent (for the view).
+function view(result: object) {
+    return { ...ok(result), structuredContent: result as Record<string, unknown> };
+}
+
+function failure(error: string) {
+    return { ...ok({ error }), isError: true };
 }
 
 // Run a Precios Claros tool; an upstream failure becomes a tool error instead of a crash.
@@ -16,7 +31,7 @@ async function preciosClaros(run: () => Promise<unknown>) {
     try {
         return ok(await run());
     } catch (error) {
-        return { ...ok({ store: 'precios_claros', error: errorMessage(error) }), isError: true };
+        return failure(`precios_claros: ${errorMessage(error)}`);
     }
 }
 
@@ -28,15 +43,29 @@ const walletSchema = z.object({
     days: z.array(z.enum(WEEKDAYS)).optional().describe('Days the promo applies; omit for every day.')
 });
 
+const cartIdSchema = z.string().uuid().describe('Cart id returned by search_products or add_to_cart. Reuse the same id for the whole conversation.');
+
 // The factory runs once per request, so keep no state on the server instance.
-function buildServer(origin: string): McpServer {
-    const server = new McpServer({ name: 'qillay', version: '0.2.0' });
+function buildServer(origin: string, env: Env): McpServer {
+    const server = new McpServer({ name: 'qillay', version: '0.3.0' });
+
+    server.registerResource(
+        'qillay-app',
+        APP_URI,
+        {
+            title: 'Qillay',
+            description: 'Product carousel, shopping cart and order confirmation for the Qillay tools.',
+            mimeType: APP_MIME,
+            _meta: APP_UI_META
+        },
+        async uri => ({ contents: [{ uri: uri.href, mimeType: APP_MIME, text: APP_HTML, _meta: APP_UI_META }] })
+    );
 
     server.registerTool(
         'search_products',
         {
             description:
-                'Search grocery products by text across Argentine supermarkets. Returns products sorted by ascending price, each with store, name, brand, EAN, price_cents (ARS centavos, divide by 100 for pesos), image_url and url. "stores" gives the display name and color of each store. Stores that fail are listed in "errors" and do not affect the rest. Use two or more words ("leche entera 1l"); single words match poorly. "cards_url" is a web page showing these products as cards with photo, price and store color: always give that link to the user.',
+                'Search grocery products by text across Argentine supermarkets. Use it for any question about a product or its price. Returns products sorted by ascending price, each with store, name, brand, EAN, price_cents (ARS centavos, divide by 100 for pesos), image_url and url. On hosts with MCP Apps the result is shown to the user as product cards (a carousel when there are several), so do not repeat the full list in text: summarize the cheapest options. "cart_id" identifies the user\'s cart: pass it to every later call. Use two or more words ("coca cola 2.25l"); single words match poorly. Stores that fail are listed in "errors".',
             inputSchema: z.object({
                 q: z.string().trim().min(1).describe('Search text in Spanish, for example "leche entera 1l".'),
                 stores: z
@@ -50,13 +79,100 @@ function buildServer(origin: string): McpServer {
                     .string()
                     .optional()
                     .describe('Comma-separated Precios Claros branch ids (from list_branches). Only for the precios_claros store.'),
-                limit: z.number().int().min(1).max(20).default(5).describe('Maximum products per store (max 20).')
-            })
+                limit: z.number().int().min(1).max(20).default(3).describe('Maximum products per store (max 20).'),
+                cart_id: cartIdSchema.optional()
+            }),
+            _meta: APP_TOOL_META
         },
-        async ({ q, stores, branch_ids, limit }) => {
+        async ({ q, stores, branch_ids, limit, cart_id }) => {
             const selected = stores ?? DEFAULT_STORES;
             const result = await searchProducts(q, selected, { limit, branchIds: branch_ids });
-            return ok({ cards_url: cardsUrl(origin, q, selected, limit), ...result });
+            return view({ cart_id: cart_id ?? newCartId(), cards_url: cardsUrl(origin, q, selected, limit), ...result });
+        }
+    );
+
+    server.registerTool(
+        'add_to_cart',
+        {
+            description:
+                'Add a product to the user\'s shopping cart. Copy store, name, brand, ean, price_cents, image_url and url exactly from a search_products result. Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store.',
+            inputSchema: z.object({
+                cart_id: cartIdSchema.nullish(),
+                store: z.string().min(1).describe('Store id of the product, from search_products.'),
+                name: z.string().min(1).describe('Product name, from search_products.'),
+                brand: z.string().nullish(),
+                ean: z.string().nullish(),
+                price_cents: z.number().int().positive().describe('Unit price in ARS centavos, from search_products.'),
+                image_url: z.string().nullish(),
+                url: z.string().nullish(),
+                quantity: z.number().int().min(1).max(99).default(1)
+            }),
+            _meta: APP_TOOL_META
+        },
+        async ({ cart_id, store, name, brand, ean, price_cents, image_url, url, quantity }) =>
+            view(
+                await addItem(env.CARTS, cart_id ?? newCartId(), {
+                    store,
+                    name,
+                    brand: brand ?? undefined,
+                    ean: ean ?? undefined,
+                    price_cents,
+                    image_url: image_url ?? undefined,
+                    url: url ?? undefined,
+                    quantity
+                })
+            )
+    );
+
+    server.registerTool(
+        'view_cart',
+        {
+            description:
+                'Show the user\'s shopping cart: every item, the subtotal per store and the total. Call it when the user asks for the cart or the full shopping list, and before asking whether they want to buy.',
+            inputSchema: z.object({ cart_id: cartIdSchema }),
+            _meta: APP_TOOL_META
+        },
+        async ({ cart_id }) => view(await getCart(env.CARTS, cart_id))
+    );
+
+    server.registerTool(
+        'remove_from_cart',
+        {
+            description: 'Remove one item from the cart by its item_id (from view_cart or add_to_cart). Returns the updated cart.',
+            inputSchema: z.object({ cart_id: cartIdSchema, item_id: z.string().min(1).describe('The item_id of the cart item to remove.') }),
+            _meta: APP_TOOL_META
+        },
+        async ({ cart_id, item_id }) => view(await removeItem(env.CARTS, cart_id, item_id))
+    );
+
+    server.registerTool(
+        'create_order',
+        {
+            description:
+                'Buy the cart. This is a demo: the payment is simulated and nothing is charged. First show the cart with view_cart and ask the user whether they want to buy it; call this with confirmed=true only after the user explicitly says yes. With confirmed=false it changes nothing and returns the cart to confirm.',
+            inputSchema: z.object({
+                cart_id: cartIdSchema,
+                confirmed: z.boolean().describe('true only when the user has explicitly confirmed the purchase in this conversation.')
+            }),
+            _meta: APP_TOOL_META
+        },
+        async ({ cart_id, confirmed }) => {
+            const cart = await getCart(env.CARTS, cart_id);
+            if (cart.items.length === 0) return failure('The cart is empty.');
+            if (!confirmed) return view({ ...cart, needs_confirmation: true, note: 'Ask the user to confirm the purchase.' });
+            await clearCart(env.CARTS, cart_id);
+            return view({
+                order: {
+                    order_id: `QY-${cart_id.slice(0, 8).toUpperCase()}`,
+                    status: 'confirmed',
+                    payment: 'simulated',
+                    item_count: cart.item_count,
+                    total_cents: cart.total_cents,
+                    by_store: cart.by_store,
+                    items: cart.items
+                },
+                note: 'Demo order: the payment is simulated and nothing was charged. Say so to the user.'
+            });
         }
     );
 
@@ -125,14 +241,18 @@ function buildServer(origin: string): McpServer {
 const handlers = new Map<string, ReturnType<typeof createMcpHandler>>();
 
 export default {
-    async fetch(request: Request): Promise<Response> {
+    async fetch(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
-        if (request.method === 'GET' && url.pathname === '/cards') return cardsPage(url);
+        if (request.method === 'GET') {
+            if (url.pathname === '/cards') return cardsPage(url);
+            if (url.pathname === '/preview') return previewPage();
+            if (url.pathname === '/app.html') return new Response(APP_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        }
         let handler = handlers.get(url.origin);
         if (!handler) {
-            handler = createMcpHandler(() => buildServer(url.origin));
+            handler = createMcpHandler(() => buildServer(url.origin, env));
             handlers.set(url.origin, handler);
         }
         return handler.fetch(request);
     }
-};
+} satisfies ExportedHandler<Env>;
