@@ -246,7 +246,12 @@ export default {
         if (request.method === 'GET') {
             if (url.pathname === '/cards') return cardsPage(url);
             if (url.pathname === '/preview') return previewPage();
-            if (url.pathname === '/app.html') return new Response(APP_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+            if (url.pathname === '/app.html') {
+                // Served standalone only for /preview on this origin; real hosts read it through resources/read.
+                return new Response(APP_HTML, {
+                    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "frame-ancestors 'self'" }
+                });
+            }
         }
         let handler = handlers.get(url.origin);
         if (!handler) {

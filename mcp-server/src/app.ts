@@ -56,6 +56,9 @@ const root = document.getElementById('root');
 const pending = new Map();
 let nextId = 1;
 let cartId = null;
+let hostOrigin = null;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function setCart(id) { if (typeof id === 'string' && UUID.test(id)) cartId = id; }
 
 function post(message) { window.parent.postMessage(message, '*'); }
 function request(method, params) {
@@ -66,6 +69,10 @@ function request(method, params) {
 function notify(method, params) { post({ jsonrpc: '2.0', method, params }); }
 
 window.addEventListener('message', event => {
+    // Only the embedding host may talk to the view, and only from the origin it first used.
+    if (event.source !== window.parent) return;
+    if (hostOrigin === null) hostOrigin = event.origin;
+    else if (event.origin !== hostOrigin) return;
     const message = event.data;
     if (!message || message.jsonrpc !== '2.0') return;
     if (message.id !== undefined && message.method === undefined) {
@@ -94,7 +101,7 @@ function dataOf(result) {
 function show(result) {
     const data = dataOf(result);
     if (!data) return;
-    if (data.cart_id) cartId = data.cart_id;
+    setCart(data.cart_id);
     if (data.order) renderOrder(data.order);
     else if (data.items) renderCart(data);
     else if (data.products) renderProducts(data);
@@ -144,7 +151,7 @@ function renderProducts(data) {
                     cart_id: cartId, store: product.store, name: product.name, brand: product.brand, ean: product.ean,
                     price_cents: product.price_cents, image_url: product.image_url, url: product.url, quantity: 1
                 });
-                if (cart && cart.cart_id) cartId = cart.cart_id;
+                if (cart) setCart(cart.cart_id);
                 add.textContent = 'Agregado';
                 status.textContent = cart ? cart.item_count + ' en el carrito · ' + pesos(cart.total_cents) : '';
             } catch (error) {
@@ -180,7 +187,7 @@ function renderCart(cart) {
         const remove = el('button', 'link', 'Quitar');
         remove.addEventListener('click', async () => {
             remove.disabled = true;
-            try { renderCart(await callTool('remove_from_cart', { cart_id: cart.cart_id, item_id: item.item_id })); } catch { remove.disabled = false; }
+            try { renderCart(await callTool('remove_from_cart', { cart_id: cartId, item_id: item.item_id })); } catch { remove.disabled = false; }
         });
         meta.append(remove);
         info.append(meta);
@@ -203,7 +210,7 @@ function renderCart(cart) {
     buy.addEventListener('click', async () => {
         buy.disabled = true;
         try {
-            await request('ui/message', { role: 'user', content: { type: 'text', text: 'Sí, confirmo la compra del carrito ' + cart.cart_id + '.' } });
+            await request('ui/message', { role: 'user', content: { type: 'text', text: 'Sí, confirmo la compra del carrito ' + cartId + '.' } });
             status.textContent = 'Confirmación enviada.';
         } catch {
             buy.disabled = false;
