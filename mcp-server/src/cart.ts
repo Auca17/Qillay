@@ -70,6 +70,40 @@ export async function removeItem(kv: KVNamespace, cartId: string, itemId: string
     return summarize(cartId, cart);
 }
 
+export interface Order {
+    order_id: string;
+    status: 'confirmed';
+    payment: 'approved';
+    item_count: number;
+    total_cents: number;
+    by_store: CartSummary['by_store'];
+    items: CartSummary['items'];
+}
+
+// The order replaces the cart under the same id, so the cart link keeps working as the receipt.
+export async function placeOrder(kv: KVNamespace, cart: CartSummary): Promise<Order> {
+    const order: Order = {
+        order_id: `QY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        status: 'confirmed',
+        payment: 'approved',
+        item_count: cart.item_count,
+        total_cents: cart.total_cents,
+        by_store: cart.by_store,
+        items: cart.items
+    };
+    await kv.put(orderKey(cart.cart_id), JSON.stringify(order), { expirationTtl: TTL_SECONDS });
+    await clearCart(kv, cart.cart_id);
+    return order;
+}
+
+export async function getOrder(kv: KVNamespace, cartId: string): Promise<Order | null> {
+    return kv.get<Order>(orderKey(cartId), 'json');
+}
+
+function orderKey(cartId: string): string {
+    return `order:${cartId}`;
+}
+
 export async function clearCart(kv: KVNamespace, cartId: string): Promise<void> {
     await kv.delete(key(cartId));
 }

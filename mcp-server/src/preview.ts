@@ -120,7 +120,7 @@ export function cartPage(url: URL): Response {
     return page(
         'Qillay · tu compra',
         `<h1>Qillay · tu compra</h1>
-<p>Revisá los productos y el total antes de confirmar.</p>
+<p>El detalle de tu compra en Qillay.</p>
 <p id="log"></p>
 <iframe id="app" src="/app.html" sandbox="allow-scripts" title="Carrito Qillay"></iframe>`,
         id.toLowerCase()

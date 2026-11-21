@@ -3,7 +3,7 @@ import * as z from 'zod/v4';
 
 import { APP_HTML, APP_MIME, APP_UI_META, APP_URI } from './app';
 import { cardsPage, cardsUrl } from './cards';
-import { addItems, clearCart, getCart, newCartId, removeItem, type CartSummary } from './cart';
+import { addItems, getCart, getOrder, newCartId, placeOrder, removeItem, type CartSummary } from './cart';
 import { errorMessage } from './http';
 import { comparePrice, listBranches } from './precios-claros';
 import { cartPage, previewPage } from './preview';
@@ -24,7 +24,7 @@ function view(result: object) {
 
 // How the model should run the shopping flow; also kept in DEMO_PROMPT.md for clients that ignore server instructions.
 const INSTRUCTIONS =
-    'Qillay helps a user in Argentina buy a grocery list at the best price. Flow: (1) for each item of the list call search_products; (2) show the user a short comparison per item (store, product, price in pesos) and the option you recommend; (3) wait for the user to approve; (4) call add_to_cart ONCE with every approved product in "items"; (5) give the user the "cart_url" link from the result: on that page they see the products, the total per store and pay. Do not call create_order yourself unless the user asks you to buy without opening the link. Prices are in ARS centavos: divide by 100. Answer in Spanish.';
+    'Qillay helps a user in Argentina buy a grocery list at the best price. Flow: (1) for each item of the list call search_products; (2) show the user a short comparison per item (store, product, price in pesos) and the option you recommend; (3) wait for the user to approve; (4) call add_to_cart ONCE with every approved product in "items"; (5) call create_order with confirmed=true; (6) tell the user the order id and the total and give them the "cart_url" link, where they see the order with its products and the total per store. Never buy without the approval of the user. Prices are in ARS centavos: divide by 100. Answer in Spanish.';
 
 function failure(error: string) {
     return { ...ok({ error }), isError: true };
@@ -153,7 +153,12 @@ function buildServer(origin: string, env: Env): McpServer {
             inputSchema: z.object({ cart_id: cartIdSchema }),
             _meta: APP_TOOL_META
         },
-        async ({ cart_id }) => view(withUrl(await getCart(env.CARTS, cart_id)))
+        async ({ cart_id }) => {
+            const cart = await getCart(env.CARTS, cart_id);
+            // After the purchase the cart is empty and the same id shows the order.
+            const order = cart.items.length === 0 ? await getOrder(env.CARTS, cart_id) : null;
+            return view(order ? { cart_id, cart_url: withUrl(cart).cart_url, order } : withUrl(cart));
+        }
     );
 
     server.registerTool(
@@ -170,7 +175,7 @@ function buildServer(origin: string, env: Env): McpServer {
         'create_order',
         {
             description:
-                'Buy the cart. First show the cart with view_cart and ask the user whether they want to buy it; call this with confirmed=true only after the user explicitly says yes. With confirmed=false it changes nothing and returns the cart to confirm.',
+                'Buy the cart. Call it with confirmed=true only after the user has explicitly approved the purchase in this conversation. With confirmed=false it changes nothing and returns the cart to confirm. On success it returns the order and "cart_url", the link where the user sees the order: always give them that link.',
             inputSchema: z.object({
                 cart_id: cartIdSchema,
                 confirmed: z.boolean().describe('true only when the user has explicitly confirmed the purchase in this conversation.')
@@ -181,18 +186,11 @@ function buildServer(origin: string, env: Env): McpServer {
             const cart = await getCart(env.CARTS, cart_id);
             if (cart.items.length === 0) return failure('The cart is empty.');
             if (!confirmed) return view({ ...withUrl(cart), needs_confirmation: true, note: 'Ask the user to confirm the purchase.' });
-            await clearCart(env.CARTS, cart_id);
             return view({
-                order: {
-                    order_id: `QY-${cart_id.slice(0, 8).toUpperCase()}`,
-                    status: 'confirmed',
-                    payment: 'approved',
-                    item_count: cart.item_count,
-                    total_cents: cart.total_cents,
-                    by_store: cart.by_store,
-                    items: cart.items
-                },
-                note: 'Order confirmed. Tell the user the order id and the total.'
+                cart_id,
+                cart_url: withUrl(cart).cart_url,
+                order: await placeOrder(env.CARTS, cart),
+                note: 'Order confirmed. Tell the user the order id and the total, and give them the "cart_url" link: it now shows the order.'
             });
         }
     );

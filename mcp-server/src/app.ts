@@ -229,7 +229,30 @@ function renderOrder(order) {
     root.replaceChildren();
     const panel = el('section', 'panel');
     panel.append(el('p', 'paid', 'Pedido confirmado'), el('h1', '', 'Pedido ' + order.order_id));
-    panel.append(el('p', 'muted', order.item_count + ' productos · ' + pesos(order.total_cents)));
+    panel.append(el('p', 'muted', order.item_count + ' productos · Pago aprobado'));
+    const stores = Object.fromEntries((order.by_store || []).map(store => [store.store, store]));
+    for (const item of order.items || []) {
+        const row = el('div', 'row');
+        const info = el('div', 'info');
+        info.append(el('div', 'title', item.name));
+        const meta = el('div', 'muted');
+        const dot = el('span', 'dot');
+        dot.style.setProperty('--store', (stores[item.store] || {}).color || '#555555');
+        meta.append(dot, ((stores[item.store] || {}).name || item.store) + ' · ' + item.quantity + ' × ' + pesos(item.price_cents));
+        info.append(meta);
+        row.append(picture(item.image_url), info, el('div', 'amount', pesos(item.line_total_cents)));
+        panel.append(row);
+    }
+    const totals = el('ul', 'totals');
+    for (const store of order.by_store || []) {
+        const line = el('li');
+        line.append(el('span', '', store.name), el('span', '', pesos(store.subtotal_cents)));
+        totals.append(line);
+    }
+    const total = el('li', 'total');
+    total.append(el('span', '', 'Total pagado'), el('span', '', pesos(order.total_cents)));
+    totals.append(total);
+    panel.append(totals);
     panel.append(el('p', 'muted', 'Te avisamos cuando esté listo para retirar.'));
     root.append(panel);
 }
