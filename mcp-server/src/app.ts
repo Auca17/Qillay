@@ -45,6 +45,20 @@ button.link { margin: 0; padding: 0; border: 0; color: var(--muted); font-weight
 .totals { margin: 10px 0 0; padding: 0; list-style: none; font-size: 0.85rem; }
 .totals li { display: flex; justify-content: space-between; padding: 2px 0; }
 .totals .total { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 1.1rem; font-weight: 700; }
+.mousekey { display: flex; gap: 12px; align-items: center; margin-top: 12px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; }
+.mousekey.wait { border-color: #f2b31b; }
+.mousekey.ok { border-color: #2f8a4c; }
+.mousekey.no { border-color: #c0392b; }
+.mousekey .mk-text { flex: 1; min-width: 0; }
+.mk-cat svg { width: 76px; height: 76px; display: block; }
+.mk-meter { height: 10px; margin-top: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.mk-meter i { display: block; height: 100%; width: 0; background: #f2b31b; transition: width .12s ease-out; }
+.mk-cat .mk-happy, .mk-cat .mk-sad { display: none; }
+.mk-cat.happy .mk-open, .mk-cat.sad .mk-open, .mk-cat.happy .mk-idle, .mk-cat.sad .mk-idle { display: none; }
+.mk-cat.happy .mk-happy, .mk-cat.sad .mk-sad { display: inline; }
+.mk-cat.wait svg { animation: mk-shake .3s ease-in-out infinite alternate; }
+@keyframes mk-shake { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+@media (prefers-reduced-motion: reduce) { .mk-cat.wait svg { animation: none; } }
 .actions { display: flex; gap: 8px; margin-top: 14px; }
 .actions button { flex: 1; }
 .paid { color: var(--ok); font-weight: 700; font-size: 1.05rem; }
@@ -210,8 +224,7 @@ function renderCart(cart) {
     const actions = el('div', 'actions');
     const buy = el('button', 'primary', 'Comprar');
     const status = el('p', 'status');
-    buy.addEventListener('click', async () => {
-        buy.disabled = true;
+    async function confirmPurchase() {
         try {
             await request('ui/message', { role: 'user', content: { type: 'text', text: 'Sí, confirmo la compra del carrito ' + cartId + '.' } });
             status.textContent = 'Confirmación enviada.';
@@ -219,10 +232,106 @@ function renderCart(cart) {
             buy.disabled = false;
             status.textContent = 'Escribí "confirmo la compra" en el chat para continuar.';
         }
-    });
+    }
+    // MouseKey: Cuyano only approves a purchase made with a real, shaken mouse.
+    buy.addEventListener('click', event => startMouseKey(event, panel, buy, confirmPurchase));
     actions.append(buy);
     panel.append(actions, status);
     root.append(panel);
+}
+
+const CUYANO = '<svg viewBox="50 16 120 122" aria-hidden="true">'
+    + '<path d="M66 70 60 24l38 24z" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5" stroke-linejoin="round"/><path d="M69 58 66 36l18 12z" fill="#e88b7a"/>'
+    + '<path d="M154 70l6-46-38 24z" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5" stroke-linejoin="round"/><path d="m151 58 3-22-18 12z" fill="#e88b7a"/>'
+    + '<ellipse cx="110" cy="84" rx="54" ry="46" fill="#e9a23b" stroke="#6f4a22" stroke-width="2.5"/>'
+    + '<path d="M98 42c2 8 2 14 0 20M110 40v22M122 42c-2 8-2 14 0 20" stroke="#b86b1f" stroke-width="3.5" stroke-linecap="round" fill="none"/>'
+    + '<ellipse cx="110" cy="104" rx="26" ry="18" fill="#f6e3bf"/>'
+    + '<g class="mk-open"><ellipse cx="88" cy="82" rx="12" ry="13" fill="#fff" stroke="#6f4a22" stroke-width="2"/><ellipse cx="132" cy="82" rx="12" ry="13" fill="#fff" stroke="#6f4a22" stroke-width="2"/>'
+    + '<g class="mk-pupils"><ellipse cx="88" cy="83" rx="5" ry="7.5" fill="#1b1e2b"/><ellipse cx="132" cy="83" rx="5" ry="7.5" fill="#1b1e2b"/></g></g>'
+    + '<g class="mk-happy" fill="none" stroke="#1b1e2b" stroke-width="3.5" stroke-linecap="round"><path d="M77 84c5-8 17-8 22 0M121 84c5-8 17-8 22 0"/></g>'
+    + '<g class="mk-sad"><circle cx="88" cy="88" r="5" fill="#1b1e2b"/><circle cx="132" cy="88" r="5" fill="#1b1e2b"/><path d="M75 76l24 6M145 76l-24 6" stroke="#6f4a22" stroke-width="3" stroke-linecap="round"/></g>'
+    + '<path d="M104 97h12l-6 7z" fill="#d96a5a" stroke="#6f4a22" stroke-width="1.5" stroke-linejoin="round"/>'
+    + '<path class="mk-idle" d="M110 104c0 6-6 9-11 7M110 104c0 6 6 9 11 7" fill="none" stroke="#6f4a22" stroke-width="2.2" stroke-linecap="round"/>'
+    + '<path class="mk-happy" d="M97 106c4 10 22 10 26 0z" fill="#b5413a" stroke="#6f4a22" stroke-width="2" stroke-linejoin="round"/>'
+    + '<path class="mk-sad" d="M100 114c5-6 15-6 20 0" fill="none" stroke="#6f4a22" stroke-width="2.5" stroke-linecap="round"/>'
+    + '<path d="M80 102 56 98M80 108l-24 4M140 102l24-4M140 108l24 4" stroke="#6f4a22" stroke-width="1.6" stroke-linecap="round"/>'
+    + '</svg>';
+
+const MOUSEKEY_SHAKES = 10;
+const MOUSEKEY_TIMEOUT_MS = 15000;
+
+function startMouseKey(event, panel, buy, onPass) {
+    let box = panel.querySelector('.mousekey');
+    if (!box) {
+        box = el('div', 'mousekey');
+        const cat = el('div', 'mk-cat');
+        cat.innerHTML = CUYANO; // constant markup, no user data
+        const text = el('div', 'mk-text');
+        text.append(el('div', 'title'), el('div', 'muted'));
+        const meter = el('div', 'mk-meter');
+        meter.append(el('i'));
+        text.append(meter);
+        box.append(cat, text);
+        panel.append(box);
+    }
+    const cat = box.querySelector('.mk-cat');
+    const [title, hint] = box.querySelectorAll('.mk-text > div');
+    const meter = box.querySelector('.mk-meter');
+    const fill = meter.querySelector('i');
+    const set = (state, head, body) => {
+        box.className = 'mousekey ' + state;
+        cat.className = 'mk-cat ' + (state === 'ok' ? 'happy' : state === 'no' ? 'sad' : 'wait');
+        title.textContent = head;
+        hint.textContent = body;
+        meter.style.display = state === 'wait' ? '' : 'none';
+    };
+    const reject = body => {
+        set('no', 'Pago rechazado', body);
+        buy.disabled = false;
+    };
+
+    const finePointer = window.matchMedia('(any-pointer: fine)').matches;
+    if (!finePointer || (event.pointerType && event.pointerType !== 'mouse')) {
+        reject('Cuyano no ve ningún mouse. Sin mouse no hay pago: conectá uno y probá de nuevo.');
+        return;
+    }
+
+    buy.disabled = true;
+    fill.style.width = '0%';
+    set('wait', 'Sacudí el mouse para pagar', 'Movelo de un lado a otro sobre el carrito. Cuyano solo aprueba pagos con un mouse de verdad.');
+    let flips = 0;
+    let lastSign = 0;
+    const pupils = cat.querySelector('.mk-pupils');
+    const stop = () => {
+        document.removeEventListener('pointermove', onMove);
+        clearTimeout(timer);
+    };
+    const timer = setTimeout(() => {
+        stop();
+        reject('No sentimos la sacudida a tiempo. Tocá Comprar y sacudilo más fuerte.');
+    }, MOUSEKEY_TIMEOUT_MS);
+    function onMove(move) {
+        if (move.pointerType !== 'mouse') {
+            stop();
+            reject('Eso no era un mouse. Sin mouse no hay pago.');
+            return;
+        }
+        const dx = move.movementX || 0;
+        if (pupils) pupils.setAttribute('transform', 'translate(' + Math.max(-5, Math.min(5, dx)) + ' 0)');
+        if (Math.abs(dx) < 4) return;
+        const sign = Math.sign(dx);
+        if (sign !== lastSign) {
+            if (lastSign !== 0) flips++;
+            lastSign = sign;
+        }
+        fill.style.width = Math.min(100, Math.round((flips / MOUSEKEY_SHAKES) * 100)) + '%';
+        if (flips >= MOUSEKEY_SHAKES) {
+            stop();
+            set('ok', 'Mouse verificado', 'Cuyano aprobó el pago. Confirmando la compra...');
+            onPass();
+        }
+    }
+    document.addEventListener('pointermove', onMove);
 }
 
 function renderOrder(order) {
