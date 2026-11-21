@@ -49,13 +49,16 @@ export async function getCart(kv: KVNamespace, cartId: string): Promise<CartSumm
     return summarize(cartId, await load(kv, cartId));
 }
 
+// Adds every item in one read-modify-write: KV has no transactions, so parallel writes to one cart lose items.
 // Adding a product already in the cart increases its quantity.
-export async function addItem(kv: KVNamespace, cartId: string, item: NewCartItem): Promise<CartSummary> {
+export async function addItems(kv: KVNamespace, cartId: string, items: NewCartItem[]): Promise<CartSummary> {
     const cart = await load(kv, cartId);
-    const itemId = `${item.store}:${item.ean ?? item.name.toLowerCase()}`;
-    const existing = cart.items.find(entry => entry.item_id === itemId);
-    if (existing) existing.quantity += item.quantity;
-    else cart.items.push({ ...item, item_id: itemId });
+    for (const item of items) {
+        const itemId = `${item.store}:${item.ean ?? item.name.toLowerCase()}`;
+        const existing = cart.items.find(entry => entry.item_id === itemId);
+        if (existing) existing.quantity += item.quantity;
+        else cart.items.push({ ...item, item_id: itemId });
+    }
     await save(kv, cartId, cart);
     return summarize(cartId, cart);
 }

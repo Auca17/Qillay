@@ -148,8 +148,11 @@ function renderProducts(data) {
             add.disabled = true;
             try {
                 const cart = await callTool('add_to_cart', {
-                    cart_id: cartId, store: product.store, name: product.name, brand: product.brand, ean: product.ean,
-                    price_cents: product.price_cents, image_url: product.image_url, url: product.url, quantity: 1
+                    cart_id: cartId,
+                    items: [{
+                        store: product.store, name: product.name, brand: product.brand, ean: product.ean,
+                        price_cents: product.price_cents, image_url: product.image_url, url: product.url, quantity: 1
+                    }]
                 });
                 if (cart) setCart(cart.cart_id);
                 add.textContent = 'Agregado';
