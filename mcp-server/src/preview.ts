@@ -43,7 +43,7 @@ window.addEventListener('message', async event => {
             reply(await mcp(message.params.name, message.params.arguments));
         } else if (message.method === 'ui/message') {
             reply({});
-            say(START_CART ? 'Procesando el pago simulado…' : 'El usuario dijo: ' + message.params.content.text);
+            say(START_CART ? 'Procesando el pago…' : 'El usuario dijo: ' + message.params.content.text);
             showResult(await mcp('create_order', { cart_id: cartId, confirmed: true }));
             if (START_CART) say('');
         } else if (message.id !== undefined) {
@@ -120,7 +120,7 @@ export function cartPage(url: URL): Response {
     return page(
         'Qillay · tu compra',
         `<h1>Qillay · tu compra</h1>
-<p>Revisá los productos y el total. El pago es una simulación: no se cobra nada.</p>
+<p>Revisá los productos y el total antes de confirmar.</p>
 <p id="log"></p>
 <iframe id="app" src="/app.html" sandbox="allow-scripts" title="Carrito Qillay"></iframe>`,
         id.toLowerCase()

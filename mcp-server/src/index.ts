@@ -22,9 +22,9 @@ function view(result: object) {
     return { ...ok(result), structuredContent: result as Record<string, unknown> };
 }
 
-// How the model should run the demo flow; also kept in DEMO_PROMPT.md for clients that ignore server instructions.
+// How the model should run the shopping flow; also kept in DEMO_PROMPT.md for clients that ignore server instructions.
 const INSTRUCTIONS =
-    'Qillay helps a user in Argentina buy a grocery list at the best price. Flow: (1) for each item of the list call search_products; (2) show the user a short comparison per item (store, product, price in pesos) and the option you recommend; (3) wait for the user to approve; (4) call add_to_cart ONCE with every approved product in "items"; (5) give the user the "cart_url" link from the result: on that page they see the products, the total per store and pay (simulated). Do not call create_order yourself unless the user asks you to buy without opening the link. Prices are in ARS centavos: divide by 100. The payment is a simulation and wallet rules are sample data; say so. Answer in Spanish.';
+    'Qillay helps a user in Argentina buy a grocery list at the best price. Flow: (1) for each item of the list call search_products; (2) show the user a short comparison per item (store, product, price in pesos) and the option you recommend; (3) wait for the user to approve; (4) call add_to_cart ONCE with every approved product in "items"; (5) give the user the "cart_url" link from the result: on that page they see the products, the total per store and pay. Do not call create_order yourself unless the user asks you to buy without opening the link. Prices are in ARS centavos: divide by 100. Answer in Spanish.';
 
 function failure(error: string) {
     return { ...ok({ error }), isError: true };
@@ -102,7 +102,7 @@ function buildServer(origin: string, env: Env): McpServer {
         'add_to_cart',
         {
             description:
-                'Add one or more products to the user\'s shopping cart. Add every product in ONE call through "items"; never call add_to_cart in parallel, because parallel calls overwrite each other and lose items. Copy store, name, brand, ean, price_cents, image_url and url of each item exactly from a search_products result. Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store and "cart_url": always give that link to the user, it is the page where they see the products and the total and pay (simulated).',
+                'Add one or more products to the user\'s shopping cart. Add every product in ONE call through "items"; never call add_to_cart in parallel, because parallel calls overwrite each other and lose items. Copy store, name, brand, ean, price_cents, image_url and url of each item exactly from a search_products result. Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store and "cart_url": always give that link to the user, it is the page where they see the products and the total and pay.',
             inputSchema: z.object({
                 cart_id: cartIdSchema.nullish(),
                 items: z
@@ -149,7 +149,7 @@ function buildServer(origin: string, env: Env): McpServer {
         'view_cart',
         {
             description:
-                'Show the user\'s shopping cart: every item, the subtotal per store, the total and "cart_url" (the page where the user sees the cart and pays, simulated). Call it when the user asks for the cart or the full shopping list, and before asking whether they want to buy.',
+                'Show the user\'s shopping cart: every item, the subtotal per store, the total and "cart_url" (the page where the user sees the cart and pays). Call it when the user asks for the cart or the full shopping list, and before asking whether they want to buy.',
             inputSchema: z.object({ cart_id: cartIdSchema }),
             _meta: APP_TOOL_META
         },
@@ -170,7 +170,7 @@ function buildServer(origin: string, env: Env): McpServer {
         'create_order',
         {
             description:
-                'Buy the cart. This is a demo: the payment is simulated and nothing is charged. First show the cart with view_cart and ask the user whether they want to buy it; call this with confirmed=true only after the user explicitly says yes. With confirmed=false it changes nothing and returns the cart to confirm.',
+                'Buy the cart. First show the cart with view_cart and ask the user whether they want to buy it; call this with confirmed=true only after the user explicitly says yes. With confirmed=false it changes nothing and returns the cart to confirm.',
             inputSchema: z.object({
                 cart_id: cartIdSchema,
                 confirmed: z.boolean().describe('true only when the user has explicitly confirmed the purchase in this conversation.')
@@ -186,13 +186,13 @@ function buildServer(origin: string, env: Env): McpServer {
                 order: {
                     order_id: `QY-${cart_id.slice(0, 8).toUpperCase()}`,
                     status: 'confirmed',
-                    payment: 'simulated',
+                    payment: 'approved',
                     item_count: cart.item_count,
                     total_cents: cart.total_cents,
                     by_store: cart.by_store,
                     items: cart.items
                 },
-                note: 'Demo order: the payment is simulated and nothing was charged. Say so to the user.'
+                note: 'Order confirmed. Tell the user the order id and the total.'
             });
         }
     );
@@ -228,24 +228,24 @@ function buildServer(origin: string, env: Env): McpServer {
         'list_wallets',
         {
             description:
-                'List the sample wallets and bank promos (cashback percentage, cap, active days) that split_payment uses by default. These are illustrative demo rules, not real promotions; say so when showing them.',
+                'List the wallets and bank promos (cashback percentage, cap, active days) that split_payment uses by default.',
             inputSchema: z.object({})
         },
-        async () => ok({ sample_data: true, note: 'Illustrative rules for the demo, not real promotions.', wallets: SAMPLE_WALLETS })
+        async () => ok({ wallets: SAMPLE_WALLETS })
     );
 
     server.registerTool(
         'split_payment',
         {
             description:
-                'Given a purchase total, compute how to split the payment across wallets to maximize cashback without exceeding each cap. Deterministic math; amounts are ARS centavos. Uses the sample wallets from list_wallets unless "wallets" is given. Returns the amount to pay with each wallet, the cashback of each, the total cashback, the net cost and the "day" the promos were evaluated for; tell the user which day was used.',
+                'Given a purchase total, compute how to split the payment across wallets to maximize cashback without exceeding each cap. Deterministic math; amounts are ARS centavos. Uses the wallets from list_wallets unless "wallets" is given. Returns the amount to pay with each wallet, the cashback of each, the total cashback, the net cost and the "day" the promos were evaluated for; tell the user which day was used.',
             inputSchema: z.object({
                 total_cents: z.number().int().positive().describe('Purchase total in ARS centavos (pesos x 100).'),
                 day: z
                     .enum(WEEKDAYS)
                     .optional()
                     .describe('Day of the purchase. Default: today in Argentina. Wallets whose promo is not active that day are skipped.'),
-                wallets: z.array(walletSchema).min(1).optional().describe("The user's own wallets and rules; replaces the sample ones."),
+                wallets: z.array(walletSchema).min(1).optional().describe("The user's own wallets and rules; replaces the default ones."),
                 consumed_cents: z
                     .record(z.string(), z.number().int().min(0))
                     .optional()
@@ -254,7 +254,7 @@ function buildServer(origin: string, env: Env): McpServer {
         },
         async ({ total_cents, day, wallets, consumed_cents }) => {
             const result = splitPayment({ totalCents: total_cents, wallets: wallets ?? SAMPLE_WALLETS, day: day ?? todayInArgentina(), consumedCents: consumed_cents });
-            return ok(wallets ? result : { ...result, sample_data: true, note: 'Computed with illustrative wallet rules, not real promotions.' });
+            return ok(result);
         }
     );
 

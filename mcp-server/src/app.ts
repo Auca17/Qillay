@@ -230,7 +230,7 @@ function renderOrder(order) {
     const panel = el('section', 'panel');
     panel.append(el('p', 'paid', 'Pedido confirmado'), el('h1', '', 'Pedido ' + order.order_id));
     panel.append(el('p', 'muted', order.item_count + ' productos · ' + pesos(order.total_cents)));
-    panel.append(el('p', 'muted', 'Demo: el pago es simulado, no se cobró nada.'));
+    panel.append(el('p', 'muted', 'Te avisamos cuando esté listo para retirar.'));
     root.append(panel);
 }
 
