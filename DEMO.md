@@ -47,12 +47,11 @@ Dale, comprá las opciones que recomendaste.
 
 ## MouseKey (Cuyano the cat)
 
-With the Grok script above, Grok buys first and then sends the `cart_url` link. That link opens on "Confirmá tu pago" with Cuyano: press "Confirmar pago" and shake the mouse over the box until the bar fills; then "Pedido confirmado" appears with the order. The order already exists on the server; MouseKey guards what the page shows.
+The confirm button is disabled until Cuyano sees a mouse. Flow: Cuyano appears with the button greyed out, you shake the mouse left and right over his box until the bar fills, Cuyano gets happy and the button turns on, then you press it. Nothing confirms by itself.
 
-The "Comprar" button of the cart view (in Grok with MCP Apps, and on the `/cart` page before buying) is guarded the same way, and the user is not asked twice:
-
-- Click "Comprar" with a mouse: Cuyano asks you to shake it left and right over the cart until the bar fills (15 s limit). Then it confirms the purchase.
-- From a phone, a tablet or a pen: rejected ("Sin mouse no hay pago").
+- With the Grok script, Grok buys first and sends the `cart_url` link. The link opens on "Confirmá tu pago" with Cuyano; after the shake, "Confirmar pago de $X" shows "Pedido confirmado" with the order. The order already exists on the server; MouseKey guards what the page shows.
+- On a cart that was not bought yet, the same gate guards "Comprar", and the order is created when you press it. The user is not asked twice.
+- On a phone or tablet (no mouse), Cuyano is sad and the button never turns on ("Sin mouse no hay pago").
 - A laptop trackpad counts as a mouse for the browser. To show the rejection on stage, open the link on a phone.
 
 Rehearse with a fresh cart: every successful MouseKey spends that cart.

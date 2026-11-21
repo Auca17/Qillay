@@ -56,9 +56,9 @@ button.link { margin: 0; padding: 0; border: 0; color: var(--muted); font-weight
 .mk-cat .mk-happy, .mk-cat .mk-sad { display: none; }
 .mk-cat.happy .mk-open, .mk-cat.sad .mk-open, .mk-cat.happy .mk-idle, .mk-cat.sad .mk-idle { display: none; }
 .mk-cat.happy .mk-happy, .mk-cat.sad .mk-sad { display: inline; }
-.mk-cat.wait svg { animation: mk-shake .3s ease-in-out infinite alternate; }
-@keyframes mk-shake { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
-@media (prefers-reduced-motion: reduce) { .mk-cat.wait svg { animation: none; } }
+.mk-cat.happy svg { animation: mk-hop .45s ease-out 2; }
+@keyframes mk-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .mk-cat.happy svg { animation: none; } }
 .actions { display: flex; gap: 8px; margin-top: 14px; }
 .actions button { flex: 1; }
 .paid { color: var(--ok); font-weight: 700; font-size: 1.05rem; }
@@ -233,14 +233,17 @@ function renderCart(cart) {
             status.textContent = 'Escribí "confirmo la compra" en el chat para continuar.';
         }
     }
-    // MouseKey: Cuyano only approves a purchase made with a real, shaken mouse.
-    buy.addEventListener('click', event => startMouseKey(event, panel, buy, () => {
+    // MouseKey: Comprar stays disabled until Cuyano sees a real mouse being shaken.
+    buy.addEventListener("click", () => {
+        if (buy.disabled) return;
         mouseKeyPassed = true;
+        buy.disabled = true;
         confirmPurchase();
-    }));
+    });
     actions.append(buy);
     panel.append(actions, status);
     root.append(panel);
+    if (!mouseKeyPassed) armMouseKey(panel, buy);
 }
 
 const CUYANO = '<svg viewBox="50 16 120 122" aria-hidden="true">'
@@ -261,7 +264,6 @@ const CUYANO = '<svg viewBox="50 16 120 122" aria-hidden="true">'
     + '</svg>';
 
 const MOUSEKEY_SHAKES = 10;
-const MOUSEKEY_TIMEOUT_MS = 15000;
 
 function mouseKeyBox(panel) {
     let box = panel.querySelector('.mousekey');
@@ -275,77 +277,57 @@ function mouseKeyBox(panel) {
         meter.append(el('i'));
         text.append(meter);
         box.append(cat, text);
-        panel.append(box);
+        // Above the confirm button: shake first, then confirm.
+        const actions = panel.querySelector(".actions");
+        if (actions) panel.insertBefore(box, actions);
+        else panel.append(box);
     }
     return box;
 }
 
-function idleMouseKey(panel) {
-    const box = mouseKeyBox(panel);
-    box.className = 'mousekey';
-    box.querySelector('.mk-cat').className = 'mk-cat';
-    const [title, hint] = box.querySelectorAll('.mk-text > div');
-    title.textContent = 'Cuyano revisa tu pago';
-    hint.textContent = 'Solo aprueba pagos hechos con un mouse. Tocá Confirmar y sacudilo.';
-    box.querySelector('.mk-meter').style.display = 'none';
-    const pupils = box.querySelector('.mk-pupils');
-    document.addEventListener('pointermove', move => {
-        const r = box.getBoundingClientRect();
-        const dx = Math.max(-5, Math.min(5, (move.clientX - r.left - 40) / 40));
-        const dy = Math.max(-4, Math.min(4, (move.clientY - r.top - 40) / 40));
-        if (pupils && !box.classList.contains('wait')) pupils.setAttribute('transform', 'translate(' + dx + ' ' + dy + ')');
-    });
-}
+// MouseKey: the confirm button stays disabled until Cuyano sees a real mouse being shaken.
+// One listener at a time: a re-render (for example after "Quitar") replaces the previous one.
+let activeMouseKey = null;
 
-function startMouseKey(event, panel, buy, onPass) {
+function armMouseKey(panel, button, onReady) {
+    if (activeMouseKey) document.removeEventListener('pointermove', activeMouseKey);
+    activeMouseKey = null;
     const box = mouseKeyBox(panel);
     const cat = box.querySelector('.mk-cat');
     const [title, hint] = box.querySelectorAll('.mk-text > div');
     const meter = box.querySelector('.mk-meter');
     const fill = meter.querySelector('i');
+    const pupils = cat.querySelector('.mk-pupils');
     const set = (state, head, body) => {
         box.className = 'mousekey ' + state;
-        cat.className = 'mk-cat ' + (state === 'ok' ? 'happy' : state === 'no' ? 'sad' : 'wait');
+        cat.className = 'mk-cat ' + (state === 'ok' ? 'happy' : state === 'no' ? 'sad' : '');
         title.textContent = head;
         hint.textContent = body;
         meter.style.display = state === 'wait' ? '' : 'none';
     };
-    const reject = body => {
-        set('no', 'Pago rechazado', body);
-        buy.disabled = false;
-    };
+    button.disabled = true;
+    fill.style.width = '0%';
 
-    const finePointer = window.matchMedia('(any-pointer: fine)').matches;
-    if (!finePointer || (event.pointerType && event.pointerType !== 'mouse')) {
-        reject('Cuyano no ve ningún mouse. Sin mouse no hay pago: conectá uno y probá de nuevo.');
+    if (!window.matchMedia('(any-pointer: fine)').matches) {
+        set('no', 'Sin mouse no hay pago', 'Cuyano no ve ningún mouse en este dispositivo. Abrí el link en una compu con mouse.');
         return;
     }
+    set('wait', 'Sacudí el mouse', 'Movelo de un lado a otro sobre este recuadro. Cuando Cuyano lo vea, se habilita el botón.');
 
-    buy.disabled = true;
-    fill.style.width = '0%';
-    set('wait', 'Sacudí el mouse para pagar', 'Movelo de un lado a otro sobre el carrito. Cuyano solo aprueba pagos con un mouse de verdad.');
     let flips = 0;
     let lastSign = 0;
     let lastX = null;
-    const pupils = cat.querySelector('.mk-pupils');
-    const stop = () => {
-        document.removeEventListener('pointermove', onMove);
-        clearTimeout(timer);
-    };
-    const timer = setTimeout(() => {
-        stop();
-        reject('No sentimos la sacudida a tiempo. Tocá Comprar y sacudilo más fuerte.');
-    }, MOUSEKEY_TIMEOUT_MS);
     function onMove(move) {
-        if (move.pointerType !== 'mouse') {
-            stop();
-            reject('Eso no era un mouse. Sin mouse no hay pago.');
-            return;
+        if (move.pointerType !== 'mouse') return;
+        const r = box.getBoundingClientRect();
+        if (pupils) {
+            const px = Math.max(-5, Math.min(5, (move.clientX - r.left - 40) / 30));
+            const py = Math.max(-4, Math.min(4, (move.clientY - r.top - 40) / 30));
+            pupils.setAttribute('transform', 'translate(' + px + ' ' + py + ')');
         }
         // Delta from clientX: movementX is 0 for some synthetic and remote-desktop events.
         const dx = lastX === null ? 0 : move.clientX - lastX;
         lastX = move.clientX;
-        if (pupils) pupils.setAttribute('transform', 'translate(' + Math.max(-5, Math.min(5, dx)) + ' 0)');
         if (Math.abs(dx) < 4) return;
         const sign = Math.sign(dx);
         if (sign !== lastSign) {
@@ -354,16 +336,20 @@ function startMouseKey(event, panel, buy, onPass) {
         }
         fill.style.width = Math.min(100, Math.round((flips / MOUSEKEY_SHAKES) * 100)) + '%';
         if (flips >= MOUSEKEY_SHAKES) {
-            stop();
-            set('ok', 'Mouse verificado', 'Cuyano aprobó el pago.');
-            onPass();
+            document.removeEventListener('pointermove', onMove);
+            activeMouseKey = null;
+            if (pupils) pupils.removeAttribute('transform');
+            set('ok', 'Mouse verificado', 'Cuyano está contento. Ya podés confirmar.');
+            button.disabled = false;
+            if (onReady) onReady();
         }
     }
+    activeMouseKey = onMove;
     document.addEventListener('pointermove', onMove);
 }
 
-// MouseKey also guards the order view: the cart link opens on the order when the chat
-// already bought it, so the user confirms the payment by shaking the mouse here.
+// The cart link opens on the order when the chat already bought it: the user confirms it here.
+// Once MouseKey passed in this view, it is not asked again.
 let mouseKeyPassed = false;
 
 function renderOrder(order) {
@@ -374,14 +360,15 @@ function renderOrder(order) {
     panel.append(el('p', 'muted', 'Pedido ' + order.order_id + ' · ' + order.item_count + ' productos · ' + pesos(order.total_cents)));
     const actions = el('div', 'actions');
     const confirm = el('button', 'primary', 'Confirmar pago de ' + pesos(order.total_cents));
-    confirm.addEventListener('click', event => startMouseKey(event, panel, confirm, () => {
+    confirm.addEventListener('click', () => {
+        if (confirm.disabled) return;
         mouseKeyPassed = true;
-        setTimeout(() => renderOrderContent(order), 900);
-    }));
+        renderOrderContent(order);
+    });
     actions.append(confirm);
     panel.append(actions);
-    idleMouseKey(panel);
     root.append(panel);
+    armMouseKey(panel, confirm);
 }
 
 function renderOrderContent(order) {
