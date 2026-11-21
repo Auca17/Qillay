@@ -28,9 +28,9 @@ Strategy: `ask-on-risk`. Forecast: about 300 authored lines, under the 400-line 
 
 ## Tasks
 
-- [ ] T1 — Commit the Worker skeleton (`ping` tool). Route: inline (already written and verified).
-- [ ] T2 — Price tools with normalized output. Route: delegated writer (several non-trivial files, needs upstream response shapes).
-- [ ] T3 — Deploy and verify on the public URL. Route: inline.
+- [x] T1 — Commit the Worker skeleton (`ping` tool). Route: inline (already written and verified). Commit `36e0b55`.
+- [x] T2 — Price tools with normalized output. Route: delegated writer (several non-trivial files, needs upstream response shapes). Commit `e50b352`.
+- [x] T3 — Deploy and verify on the public URL. Route: inline. Worker version `43ec0774`.
 
 ## Acceptance criteria
 
@@ -49,8 +49,8 @@ Test-first exception: no test runner exists and results depend on live third-par
 
 ## Progress and evidence
 
-(empty)
+- T1: skeleton verified with curl locally and on the deployed URL (`tools/list`, `tools/call ping`, legacy `initialize`). Review assessment for `4739d9c..36e0b55`: unassessable (untracked `.atl/` folders need an explicit declaration), so treated as due; pending, to run with T2's commit.
 
 ## Next step
 
-T1.
+User connects the server in Grok and reports the result. Pending: native review of `4739d9c..e50b352` (skipped on 2026-11-21, user asked to keep it simple with under two hours left); Carrefour returns 403; endpoint has no auth.
