@@ -3,6 +3,12 @@
     "name": "qillay-mcp-server",
     "main": "src/index.ts",
     "compatibility_date": "2026-11-01",
+    "kv_namespaces": [
+        {
+            "binding": "CARTS",
+            "id": "64ed7840dda84de980ca735360360fac"
+        }
+    ],
     "observability": {
         "enabled": true
     }

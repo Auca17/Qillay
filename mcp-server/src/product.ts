@@ -1,22 +1,29 @@
 // The one product shape every source is normalized to; absent fields are omitted from the JSON.
+// Money is integer centavos (ARS).
 export interface Product {
-    fuente: string;
-    nombre: string;
-    marca?: string;
+    store: string;
+    name: string;
+    brand?: string;
     ean?: string;
-    precio?: number;
-    precio_lista?: number;
-    presentacion?: string;
+    price_cents?: number;
+    list_price_cents?: number;
+    package?: string;
+    image_url?: string;
     url?: string;
 }
 
 interface Priced {
-    precio?: number;
+    price_cents?: number;
 }
 
 // Ascending price, entries without a price last.
 export function byPrice(a: Priced, b: Priced): number {
-    return (a.precio ?? Infinity) - (b.precio ?? Infinity);
+    return (a.price_cents ?? Infinity) - (b.price_cents ?? Infinity);
+}
+
+// Pesos (possibly fractional) to integer centavos.
+export function cents(pesos: number | undefined): number | undefined {
+    return pesos === undefined ? undefined : Math.round(pesos * 100);
 }
 
 // The list price only when it says something the price does not.
