@@ -49,17 +49,8 @@ export async function getCart(kv: KVNamespace, cartId: string): Promise<CartSumm
     return summarize(cartId, await load(kv, cartId));
 }
 
-export function newOrderId(): string {
-    return `QY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
+// Adds every item in one read-modify-write: KV has no transactions, so parallel writes to one cart lose items.
 // Adding a product already in the cart increases its quantity.
-export async function addItem(kv: KVNamespace, cartId: string, item: NewCartItem): Promise<CartSummary> {
-    return addItems(kv, cartId, [item]);
-}
-
-// Several products in ONE read-modify-write. KV has no transactions, so parallel calls
-// for the same cart can still overwrite each other: batch instead of calling in parallel.
 export async function addItems(kv: KVNamespace, cartId: string, items: NewCartItem[]): Promise<CartSummary> {
     const cart = await load(kv, cartId);
     for (const item of items) {
@@ -77,6 +68,40 @@ export async function removeItem(kv: KVNamespace, cartId: string, itemId: string
     cart.items = cart.items.filter(entry => entry.item_id !== itemId);
     await save(kv, cartId, cart);
     return summarize(cartId, cart);
+}
+
+export interface Order {
+    order_id: string;
+    status: 'confirmed';
+    payment: 'approved';
+    item_count: number;
+    total_cents: number;
+    by_store: CartSummary['by_store'];
+    items: CartSummary['items'];
+}
+
+// The order replaces the cart under the same id, so the cart link keeps working as the receipt.
+export async function placeOrder(kv: KVNamespace, cart: CartSummary): Promise<Order> {
+    const order: Order = {
+        order_id: `QY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        status: 'confirmed',
+        payment: 'approved',
+        item_count: cart.item_count,
+        total_cents: cart.total_cents,
+        by_store: cart.by_store,
+        items: cart.items
+    };
+    await kv.put(orderKey(cart.cart_id), JSON.stringify(order), { expirationTtl: TTL_SECONDS });
+    await clearCart(kv, cart.cart_id);
+    return order;
+}
+
+export async function getOrder(kv: KVNamespace, cartId: string): Promise<Order | null> {
+    return kv.get<Order>(orderKey(cartId), 'json');
+}
+
+function orderKey(cartId: string): string {
+    return `order:${cartId}`;
 }
 
 export async function clearCart(kv: KVNamespace, cartId: string): Promise<void> {

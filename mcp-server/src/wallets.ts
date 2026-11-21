@@ -23,21 +23,16 @@ export const SAMPLE_WALLETS: Wallet[] = [
     { id: 'mercado_pago', name: 'Mercado Pago', cashback_pct: 10, cap_cents: 500_000 }
 ];
 
-// Argentina is UTC-3 with no daylight saving time.
-const ARGENTINA_OFFSET_MS = 3 * 60 * 60 * 1000;
-
-export function weekdayInArgentina(now: Date = new Date()): Weekday {
-    const local = new Date(now.getTime() - ARGENTINA_OFFSET_MS);
-    // getUTCDay: 0 = Sunday; WEEKDAYS starts on Monday.
-    return WEEKDAYS[(local.getUTCDay() + 6) % 7]!;
+// Today's weekday in Argentina (UTC-3, no daylight saving time).
+export function todayInArgentina(now: Date = new Date()): Weekday {
+    const local = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    return WEEKDAYS[(local.getUTCDay() + 6) % 7];
 }
 
 export interface SplitInput {
     totalCents: number;
     wallets: Wallet[];
-    // Day of the purchase; defaults to today in Argentina.
-    day?: Weekday;
-    now?: Date;
+    day: Weekday;
     // Cashback already received this period, per wallet id.
     consumedCents?: Record<string, number>;
 }
@@ -53,7 +48,7 @@ export interface SplitPart {
 
 export interface SplitResult {
     total_cents: number;
-    // The day whose promos were applied.
+    // Day the promos were evaluated for.
     day: Weekday;
     parts: SplitPart[];
     // Amount left after every cap is exhausted; pay it with any method.
@@ -64,8 +59,7 @@ export interface SplitResult {
 }
 
 // Fill the highest-percentage wallets first, each up to the amount that exhausts its cap.
-export function splitPayment({ totalCents, wallets, day: requestedDay, now, consumedCents = {} }: SplitInput): SplitResult {
-    const day = requestedDay ?? weekdayInArgentina(now);
+export function splitPayment({ totalCents, wallets, day, consumedCents = {} }: SplitInput): SplitResult {
     const skipped: SplitResult['skipped'] = [];
     const usable = wallets.filter(wallet => {
         if (wallet.days && !wallet.days.includes(day)) {

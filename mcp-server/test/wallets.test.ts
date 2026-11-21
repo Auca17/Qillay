@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SAMPLE_WALLETS, splitPayment, weekdayInArgentina } from '../src/wallets';
+import { SAMPLE_WALLETS, splitPayment, todayInArgentina } from '../src/wallets';
 
 describe('splitPayment', () => {
     it('fills the best promo up to its cap first (MODO exhausts $12.000 with $40.000 on a Wednesday)', () => {
@@ -9,6 +9,7 @@ describe('splitPayment', () => {
         expect(r.parts[1]).toMatchObject({ wallet_id: 'mercado_pago', pay_cents: 4_500_000, cashback_cents: 450_000 });
         expect(r.total_cashback_cents).toBe(1_650_000);
         expect(r.net_cents).toBe(8_500_000 - 1_650_000);
+        expect(r.day).toBe('wednesday');
     });
 
     it('respects cashback already received this period', () => {
@@ -29,24 +30,13 @@ describe('splitPayment', () => {
             expect(r.parts.every(p => Number.isInteger(p.pay_cents) && Number.isInteger(p.cashback_cents))).toBe(true);
         }
     });
-
-    // Fix.md #2
-    it('uses today in Argentina when no day is given, and says which day it used', () => {
-        // 2026-11-23 is a Monday: MODO (Wednesdays) must not apply.
-        const r = splitPayment({ totalCents: 8_500_000, wallets: SAMPLE_WALLETS, now: new Date('2026-11-23T15:00:00Z') });
-        expect(r.day).toBe('monday');
-        expect(r.parts.map(p => p.wallet_id)).not.toContain('modo_bna');
-    });
-
-    it('reports the day it was given', () => {
-        expect(splitPayment({ totalCents: 100, wallets: SAMPLE_WALLETS, day: 'friday' }).day).toBe('friday');
-    });
 });
 
-describe('weekdayInArgentina', () => {
+describe('todayInArgentina', () => {
     it('uses UTC-3, not UTC', () => {
         // 02:00 UTC on Tuesday is still 23:00 on Monday in Argentina.
-        expect(weekdayInArgentina(new Date('2026-11-24T02:00:00Z'))).toBe('monday');
-        expect(weekdayInArgentina(new Date('2026-11-24T03:00:00Z'))).toBe('tuesday');
+        expect(todayInArgentina(new Date('2026-11-24T02:00:00Z'))).toBe('monday');
+        expect(todayInArgentina(new Date('2026-11-24T03:00:00Z'))).toBe('tuesday');
+        expect(todayInArgentina(new Date('2026-11-22T15:00:00Z'))).toBe('sunday');
     });
 });

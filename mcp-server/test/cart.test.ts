@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { addItem, addItems, getCart, newOrderId, type NewCartItem } from '../src/cart';
-import { buildOrder } from '../src/order';
+import { addItems, getCart, getOrder, placeOrder, type NewCartItem } from '../src/cart';
 
 // In-memory stand-in for the parts of Workers KV the cart uses.
 function fakeKv(): KVNamespace {
@@ -29,52 +28,35 @@ const oil: NewCartItem = { store: 'vea', name: 'Aceite 900ml', ean: '781', price
 describe('cart', () => {
     it('adding the same product twice increases its quantity', async () => {
         const kv = fakeKv();
-        await addItem(kv, CART, milk);
-        const cart = await addItem(kv, CART, milk);
+        await addItems(kv, CART, [milk]);
+        const cart = await addItems(kv, CART, [milk]);
         expect(cart.items).toHaveLength(1);
         expect(cart.items[0]!.quantity).toBe(2);
         expect(cart.total_cents).toBe(680_000);
     });
 
-    it('summarizes totals per store', async () => {
-        const kv = fakeKv();
-        await addItem(kv, CART, milk);
-        const cart = await addItem(kv, CART, oil);
-        expect(cart.by_store.map(s => [s.store, s.subtotal_cents])).toEqual([
-            ['jumbo', 340_000],
-            ['vea', 898_000]
-        ]);
-        expect(cart.item_count).toBe(3);
-    });
-
-    // Fix.md #1
-    it('adds several products in one write, so none is lost', async () => {
+    it('adds several products in one write and totals them per store', async () => {
         const kv = fakeKv();
         const cart = await addItems(kv, CART, [milk, yerba, oil]);
         expect(cart.items.map(i => i.name)).toEqual(['Leche 1l', 'Yerba 1kg', 'Aceite 900ml']);
-        expect((await getCart(kv, CART)).items).toHaveLength(3);
+        expect(cart.by_store.map(s => [s.store, s.subtotal_cents])).toEqual([
+            ['jumbo', 340_000],
+            ['vea', 1_418_800]
+        ]);
+        expect((await getCart(kv, CART)).item_count).toBe(4);
     });
 });
 
-describe('orders', () => {
-    // Fix.md #4
-    it('gives every order its own id', () => {
-        const a = newOrderId();
-        const b = newOrderId();
-        expect(a).toMatch(/^QY-[0-9A-F]{8}$/);
-        expect(a).not.toBe(b);
-    });
-
-    // Fix.md #5
-    it('records the wallet split of the day on the order', async () => {
+describe('placeOrder', () => {
+    it('stores the order under the cart id, empties the cart, and gives each order its own id', async () => {
         const kv = fakeKv();
-        const cart = await addItems(kv, CART, [milk, yerba, oil]);
-        // 2026-11-25 is a Wednesday: MODO 30% applies.
-        const order = buildOrder(cart, new Date('2026-11-25T15:00:00Z'));
-        expect(order.status).toBe('confirmed');
-        expect(order.total_cents).toBe(cart.total_cents);
-        expect(order.split.day).toBe('wednesday');
-        expect(order.split.parts[0]!.wallet_id).toBe('modo_bna');
-        expect(order.split.parts.reduce((s, p) => s + p.pay_cents, 0) + order.split.unassigned_cents).toBe(cart.total_cents);
+        const first = await placeOrder(kv, await addItems(kv, CART, [milk, yerba]));
+        expect(first.order_id).toMatch(/^QY-[0-9A-F]{8}$/);
+        expect(first.total_cents).toBe(860_800);
+        expect((await getCart(kv, CART)).items).toHaveLength(0);
+        expect((await getOrder(kv, CART))!.order_id).toBe(first.order_id);
+
+        const second = await placeOrder(kv, await addItems(kv, CART, [oil]));
+        expect(second.order_id).not.toBe(first.order_id);
     });
 });
