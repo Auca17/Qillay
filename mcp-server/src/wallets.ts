@@ -23,10 +23,16 @@ export const SAMPLE_WALLETS: Wallet[] = [
     { id: 'mercado_pago', name: 'Mercado Pago', cashback_pct: 10, cap_cents: 500_000 }
 ];
 
+// Today's weekday in Argentina (UTC-3, no daylight saving time).
+export function todayInArgentina(now: Date = new Date()): Weekday {
+    const local = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    return WEEKDAYS[(local.getUTCDay() + 6) % 7];
+}
+
 export interface SplitInput {
     totalCents: number;
     wallets: Wallet[];
-    day?: Weekday;
+    day: Weekday;
     // Cashback already received this period, per wallet id.
     consumedCents?: Record<string, number>;
 }
@@ -42,6 +48,8 @@ export interface SplitPart {
 
 export interface SplitResult {
     total_cents: number;
+    // Day the promos were evaluated for.
+    day: Weekday;
     parts: SplitPart[];
     // Amount left after every cap is exhausted; pay it with any method.
     unassigned_cents: number;
@@ -54,7 +62,7 @@ export interface SplitResult {
 export function splitPayment({ totalCents, wallets, day, consumedCents = {} }: SplitInput): SplitResult {
     const skipped: SplitResult['skipped'] = [];
     const usable = wallets.filter(wallet => {
-        if (day && wallet.days && !wallet.days.includes(day)) {
+        if (wallet.days && !wallet.days.includes(day)) {
             skipped.push({ wallet_id: wallet.id, reason: `promo not active on ${day}` });
             return false;
         }
@@ -88,6 +96,7 @@ export function splitPayment({ totalCents, wallets, day, consumedCents = {} }: S
     const totalCashback = parts.reduce((sum, part) => sum + part.cashback_cents, 0);
     return {
         total_cents: totalCents,
+        day,
         parts,
         unassigned_cents: remaining,
         total_cashback_cents: totalCashback,

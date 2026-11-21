@@ -3,12 +3,12 @@ import * as z from 'zod/v4';
 
 import { APP_HTML, APP_MIME, APP_UI_META, APP_URI } from './app';
 import { cardsPage, cardsUrl } from './cards';
-import { addItem, clearCart, getCart, newCartId, removeItem } from './cart';
+import { addItems, clearCart, getCart, newCartId, removeItem } from './cart';
 import { errorMessage } from './http';
 import { comparePrice, listBranches } from './precios-claros';
 import { previewPage } from './preview';
 import { DEFAULT_STORES, searchProducts, STORE_IDS } from './sources';
-import { SAMPLE_WALLETS, splitPayment, WEEKDAYS } from './wallets';
+import { SAMPLE_WALLETS, splitPayment, todayInArgentina, WEEKDAYS } from './wallets';
 
 // Tools that render in the MCP Apps view; the flat key is the pre-GA spelling some hosts still read.
 const APP_TOOL_META = { ui: { resourceUri: APP_URI }, 'ui/resourceUri': APP_URI };
@@ -95,32 +95,44 @@ function buildServer(origin: string, env: Env): McpServer {
         'add_to_cart',
         {
             description:
-                'Add a product to the user\'s shopping cart. Copy store, name, brand, ean, price_cents, image_url and url exactly from a search_products result. Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store.',
+                'Add one or more products to the user\'s shopping cart. Add every product in ONE call through "items"; never call add_to_cart in parallel, because parallel calls overwrite each other and lose items. Copy store, name, brand, ean, price_cents, image_url and url of each item exactly from a search_products result. Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store.',
             inputSchema: z.object({
                 cart_id: cartIdSchema.nullish(),
-                store: z.string().min(1).describe('Store id of the product, from search_products.'),
-                name: z.string().min(1).describe('Product name, from search_products.'),
-                brand: z.string().nullish(),
-                ean: z.string().nullish(),
-                price_cents: z.number().int().positive().describe('Unit price in ARS centavos, from search_products.'),
-                image_url: z.string().nullish(),
-                url: z.string().nullish(),
-                quantity: z.number().int().min(1).max(99).default(1)
+                items: z
+                    .array(
+                        z.object({
+                            store: z.string().min(1).describe('Store id of the product, from search_products.'),
+                            name: z.string().min(1).describe('Product name, from search_products.'),
+                            brand: z.string().nullish(),
+                            ean: z.string().nullish(),
+                            price_cents: z.number().int().positive().describe('Unit price in ARS centavos, from search_products.'),
+                            image_url: z.string().nullish(),
+                            url: z.string().nullish(),
+                            quantity: z.number().int().min(1).max(99).default(1)
+                        })
+                    )
+                    .min(1)
+                    .max(30)
+                    .describe('Every product to add, in one call.')
             }),
             _meta: APP_TOOL_META
         },
-        async ({ cart_id, store, name, brand, ean, price_cents, image_url, url, quantity }) =>
+        async ({ cart_id, items }) =>
             view(
-                await addItem(env.CARTS, cart_id ?? newCartId(), {
-                    store,
-                    name,
-                    brand: brand ?? undefined,
-                    ean: ean ?? undefined,
-                    price_cents,
-                    image_url: image_url ?? undefined,
-                    url: url ?? undefined,
-                    quantity
-                })
+                await addItems(
+                    env.CARTS,
+                    cart_id ?? newCartId(),
+                    items.map(item => ({
+                        store: item.store,
+                        name: item.name,
+                        brand: item.brand ?? undefined,
+                        ean: item.ean ?? undefined,
+                        price_cents: item.price_cents,
+                        image_url: item.image_url ?? undefined,
+                        url: item.url ?? undefined,
+                        quantity: item.quantity
+                    }))
+                )
             )
     );
 
@@ -217,10 +229,13 @@ function buildServer(origin: string, env: Env): McpServer {
         'split_payment',
         {
             description:
-                'Given a purchase total, compute how to split the payment across wallets to maximize cashback without exceeding each cap. Deterministic math; amounts are ARS centavos. Uses the sample wallets from list_wallets unless "wallets" is given. Returns the amount to pay with each wallet, the cashback of each, the total cashback and the net cost.',
+                'Given a purchase total, compute how to split the payment across wallets to maximize cashback without exceeding each cap. Deterministic math; amounts are ARS centavos. Uses the sample wallets from list_wallets unless "wallets" is given. Returns the amount to pay with each wallet, the cashback of each, the total cashback, the net cost and the "day" the promos were evaluated for; tell the user which day was used.',
             inputSchema: z.object({
                 total_cents: z.number().int().positive().describe('Purchase total in ARS centavos (pesos x 100).'),
-                day: z.enum(WEEKDAYS).optional().describe('Day of the purchase; wallets whose promo is not active that day are skipped.'),
+                day: z
+                    .enum(WEEKDAYS)
+                    .optional()
+                    .describe('Day of the purchase. Default: today in Argentina. Wallets whose promo is not active that day are skipped.'),
                 wallets: z.array(walletSchema).min(1).optional().describe("The user's own wallets and rules; replaces the sample ones."),
                 consumed_cents: z
                     .record(z.string(), z.number().int().min(0))
@@ -229,7 +244,7 @@ function buildServer(origin: string, env: Env): McpServer {
             })
         },
         async ({ total_cents, day, wallets, consumed_cents }) => {
-            const result = splitPayment({ totalCents: total_cents, wallets: wallets ?? SAMPLE_WALLETS, day, consumedCents: consumed_cents });
+            const result = splitPayment({ totalCents: total_cents, wallets: wallets ?? SAMPLE_WALLETS, day: day ?? todayInArgentina(), consumedCents: consumed_cents });
             return ok(wallets ? result : { ...result, sample_data: true, note: 'Computed with illustrative wallet rules, not real promotions.' });
         }
     );
