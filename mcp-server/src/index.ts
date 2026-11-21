@@ -2,9 +2,10 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 
 import { APP_HTML, APP_MIME, APP_UI_META, APP_URI } from './app';
-import { cardsPage, cardsUrl } from './cards';
-import { addItem, clearCart, getCart, newCartId, removeItem } from './cart';
+import { cachedCardsPage, cardsUrl } from './cards';
+import { addItems, clearCart, getCart, newCartId, removeItem, type NewCartItem } from './cart';
 import { errorMessage } from './http';
+import { buildOrder } from './order';
 import { comparePrice, listBranches } from './precios-claros';
 import { previewPage } from './preview';
 import { DEFAULT_STORES, searchProducts, STORE_IDS } from './sources';
@@ -44,6 +45,30 @@ const walletSchema = z.object({
 });
 
 const cartIdSchema = z.string().uuid().describe('Cart id returned by search_products or add_to_cart. Reuse the same id for the whole conversation.');
+
+const cartItemSchema = z.object({
+    store: z.string().min(1).describe('Store id of the product, from search_products.'),
+    name: z.string().min(1).describe('Product name, from search_products.'),
+    brand: z.string().nullish(),
+    ean: z.string().nullish(),
+    price_cents: z.number().int().positive().describe('Unit price in ARS centavos, from search_products.'),
+    image_url: z.string().nullish(),
+    url: z.string().nullish(),
+    quantity: z.number().int().min(1).max(99).default(1)
+});
+
+function toCartItem(item: z.infer<typeof cartItemSchema>): NewCartItem {
+    return {
+        store: item.store,
+        name: item.name,
+        brand: item.brand ?? undefined,
+        ean: item.ean ?? undefined,
+        price_cents: item.price_cents,
+        image_url: item.image_url ?? undefined,
+        url: item.url ?? undefined,
+        quantity: item.quantity
+    };
+}
 
 // The factory runs once per request, so keep no state on the server instance.
 function buildServer(origin: string, env: Env): McpServer {
@@ -95,33 +120,23 @@ function buildServer(origin: string, env: Env): McpServer {
         'add_to_cart',
         {
             description:
-                'Add a product to the user\'s shopping cart. Copy store, name, brand, ean, price_cents, image_url and url exactly from a search_products result. Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store.',
-            inputSchema: z.object({
+                'Add products to the user\'s shopping cart. Copy store, name, brand, ean, price_cents, image_url and url exactly from a search_products result. To add several products, put them ALL in "items" in ONE call; never call add_to_cart in parallel, or some products are lost. For a single product you can pass its fields directly instead of "items". Adding a product already in the cart increases its quantity. Returns the whole cart with totals per store.',
+            inputSchema: cartItemSchema.partial().extend({
                 cart_id: cartIdSchema.nullish(),
-                store: z.string().min(1).describe('Store id of the product, from search_products.'),
-                name: z.string().min(1).describe('Product name, from search_products.'),
-                brand: z.string().nullish(),
-                ean: z.string().nullish(),
-                price_cents: z.number().int().positive().describe('Unit price in ARS centavos, from search_products.'),
-                image_url: z.string().nullish(),
-                url: z.string().nullish(),
-                quantity: z.number().int().min(1).max(99).default(1)
+                quantity: z.number().int().min(1).max(99).default(1),
+                items: z.array(cartItemSchema).min(1).max(50).optional().describe('Several products to add in one call.')
             }),
             _meta: APP_TOOL_META
         },
-        async ({ cart_id, store, name, brand, ean, price_cents, image_url, url, quantity }) =>
-            view(
-                await addItem(env.CARTS, cart_id ?? newCartId(), {
-                    store,
-                    name,
-                    brand: brand ?? undefined,
-                    ean: ean ?? undefined,
-                    price_cents,
-                    image_url: image_url ?? undefined,
-                    url: url ?? undefined,
-                    quantity
-                })
-            )
+        async ({ cart_id, items, ...single }) => {
+            const batch = items ?? [];
+            if (!items) {
+                const parsed = cartItemSchema.safeParse(single);
+                if (!parsed.success) return failure('Pass "items", or store, name and price_cents of one product.');
+                batch.push(parsed.data);
+            }
+            return view(await addItems(env.CARTS, cart_id ?? newCartId(), batch.map(toCartItem)));
+        }
     );
 
     server.registerTool(
@@ -162,16 +177,8 @@ function buildServer(origin: string, env: Env): McpServer {
             if (!confirmed) return view({ ...cart, needs_confirmation: true, note: 'Ask the user to confirm the purchase.' });
             await clearCart(env.CARTS, cart_id);
             return view({
-                order: {
-                    order_id: `QY-${cart_id.slice(0, 8).toUpperCase()}`,
-                    status: 'confirmed',
-                    payment: 'simulated',
-                    item_count: cart.item_count,
-                    total_cents: cart.total_cents,
-                    by_store: cart.by_store,
-                    items: cart.items
-                },
-                note: 'Demo order: the payment is simulated and nothing was charged. Say so to the user.'
+                order: buildOrder(cart),
+                note: 'Demo order: the payment is simulated and nothing was charged. "split" shows how to pay it with the sample wallets today (illustrative rules). Say so to the user.'
             });
         }
     );
@@ -220,7 +227,7 @@ function buildServer(origin: string, env: Env): McpServer {
                 'Given a purchase total, compute how to split the payment across wallets to maximize cashback without exceeding each cap. Deterministic math; amounts are ARS centavos. Uses the sample wallets from list_wallets unless "wallets" is given. Returns the amount to pay with each wallet, the cashback of each, the total cashback and the net cost.',
             inputSchema: z.object({
                 total_cents: z.number().int().positive().describe('Purchase total in ARS centavos (pesos x 100).'),
-                day: z.enum(WEEKDAYS).optional().describe('Day of the purchase; wallets whose promo is not active that day are skipped.'),
+                day: z.enum(WEEKDAYS).optional().describe('Day of the purchase; wallets whose promo is not active that day are skipped. Default: today in Argentina. The result says which day was used.'),
                 wallets: z.array(walletSchema).min(1).optional().describe("The user's own wallets and rules; replaces the sample ones."),
                 consumed_cents: z
                     .record(z.string(), z.number().int().min(0))
@@ -239,12 +246,13 @@ function buildServer(origin: string, env: Env): McpServer {
 
 // One MCP handler per public origin, so tools can build absolute links to the cards page.
 const handlers = new Map<string, ReturnType<typeof createMcpHandler>>();
+const MAX_HANDLERS = 8;
 
 export default {
-    async fetch(request: Request, env: Env): Promise<Response> {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
         const url = new URL(request.url);
         if (request.method === 'GET') {
-            if (url.pathname === '/cards') return cardsPage(url);
+            if (url.pathname === '/cards') return cachedCardsPage(request, ctx);
             if (url.pathname === '/preview') return previewPage();
             if (url.pathname === '/app.html') {
                 // Served standalone only for /preview on this origin; real hosts read it through resources/read.
@@ -255,6 +263,8 @@ export default {
         }
         let handler = handlers.get(url.origin);
         if (!handler) {
+            // The Worker only answers on its own routes; the cap just keeps the map bounded.
+            if (handlers.size >= MAX_HANDLERS) handlers.clear();
             handler = createMcpHandler(() => buildServer(url.origin, env));
             handlers.set(url.origin, handler);
         }

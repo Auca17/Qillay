@@ -49,13 +49,25 @@ export async function getCart(kv: KVNamespace, cartId: string): Promise<CartSumm
     return summarize(cartId, await load(kv, cartId));
 }
 
+export function newOrderId(): string {
+    return `QY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
 // Adding a product already in the cart increases its quantity.
 export async function addItem(kv: KVNamespace, cartId: string, item: NewCartItem): Promise<CartSummary> {
+    return addItems(kv, cartId, [item]);
+}
+
+// Several products in ONE read-modify-write. KV has no transactions, so parallel calls
+// for the same cart can still overwrite each other: batch instead of calling in parallel.
+export async function addItems(kv: KVNamespace, cartId: string, items: NewCartItem[]): Promise<CartSummary> {
     const cart = await load(kv, cartId);
-    const itemId = `${item.store}:${item.ean ?? item.name.toLowerCase()}`;
-    const existing = cart.items.find(entry => entry.item_id === itemId);
-    if (existing) existing.quantity += item.quantity;
-    else cart.items.push({ ...item, item_id: itemId });
+    for (const item of items) {
+        const itemId = `${item.store}:${item.ean ?? item.name.toLowerCase()}`;
+        const existing = cart.items.find(entry => entry.item_id === itemId);
+        if (existing) existing.quantity += item.quantity;
+        else cart.items.push({ ...item, item_id: itemId });
+    }
     await save(kv, cartId, cart);
     return summarize(cartId, cart);
 }

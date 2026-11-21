@@ -138,7 +138,7 @@ function renderProducts(data) {
         const card = el('article', 'card');
         card.style.setProperty('--store', store.color);
         card.append(el('span', 'store', store.name));
-        if (index === 0 && priced.length > 1) card.append(el('span', 'best', 'Más barato'));
+        if (index === 0 && priced.length > 1) card.append(el('span', 'best', 'Menor precio'));
         card.append(picture(product.image_url), el('p', 'name', product.name), el('p', 'brand', product.brand || ''));
         const price = el('p', 'price', pesos(product.price_cents) + ' ');
         if (product.list_price_cents) price.append(el('s', '', pesos(product.list_price_cents)));

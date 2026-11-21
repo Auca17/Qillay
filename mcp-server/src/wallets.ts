@@ -23,10 +23,21 @@ export const SAMPLE_WALLETS: Wallet[] = [
     { id: 'mercado_pago', name: 'Mercado Pago', cashback_pct: 10, cap_cents: 500_000 }
 ];
 
+// Argentina is UTC-3 with no daylight saving time.
+const ARGENTINA_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+export function weekdayInArgentina(now: Date = new Date()): Weekday {
+    const local = new Date(now.getTime() - ARGENTINA_OFFSET_MS);
+    // getUTCDay: 0 = Sunday; WEEKDAYS starts on Monday.
+    return WEEKDAYS[(local.getUTCDay() + 6) % 7]!;
+}
+
 export interface SplitInput {
     totalCents: number;
     wallets: Wallet[];
+    // Day of the purchase; defaults to today in Argentina.
     day?: Weekday;
+    now?: Date;
     // Cashback already received this period, per wallet id.
     consumedCents?: Record<string, number>;
 }
@@ -42,6 +53,8 @@ export interface SplitPart {
 
 export interface SplitResult {
     total_cents: number;
+    // The day whose promos were applied.
+    day: Weekday;
     parts: SplitPart[];
     // Amount left after every cap is exhausted; pay it with any method.
     unassigned_cents: number;
@@ -51,10 +64,11 @@ export interface SplitResult {
 }
 
 // Fill the highest-percentage wallets first, each up to the amount that exhausts its cap.
-export function splitPayment({ totalCents, wallets, day, consumedCents = {} }: SplitInput): SplitResult {
+export function splitPayment({ totalCents, wallets, day: requestedDay, now, consumedCents = {} }: SplitInput): SplitResult {
+    const day = requestedDay ?? weekdayInArgentina(now);
     const skipped: SplitResult['skipped'] = [];
     const usable = wallets.filter(wallet => {
-        if (day && wallet.days && !wallet.days.includes(day)) {
+        if (wallet.days && !wallet.days.includes(day)) {
             skipped.push({ wallet_id: wallet.id, reason: `promo not active on ${day}` });
             return false;
         }
@@ -88,6 +102,7 @@ export function splitPayment({ totalCents, wallets, day, consumedCents = {} }: S
     const totalCashback = parts.reduce((sum, part) => sum + part.cashback_cents, 0);
     return {
         total_cents: totalCents,
+        day,
         parts,
         unassigned_cents: remaining,
         total_cashback_cents: totalCashback,

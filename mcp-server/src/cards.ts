@@ -7,6 +7,27 @@ export function cardsUrl(origin: string, q: string, stores: readonly StoreId[], 
     return `${origin}/cards?${params}`;
 }
 
+// Worker responses are not cached by Cloudflare on their own: keep each search in the
+// Cache API for 2 minutes so repeated GETs do not fan out to every retailer again.
+export async function cachedCardsPage(request: Request, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    const key = new Request(cacheKey(url), { method: 'GET' });
+    const cache = caches.default;
+    const hit = await cache.match(key);
+    if (hit) return hit;
+    const response = await cardsPage(url);
+    if (response.ok) ctx.waitUntil(cache.put(key, response.clone()));
+    return response;
+}
+
+// Same search, same key: normalized text, sorted stores, clamped limit.
+function cacheKey(url: URL): string {
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase().slice(0, 100);
+    const stores = (url.searchParams.get('stores') ?? '').split(',').filter(isStoreId).sort().join(',');
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 5, 1), 20);
+    return `${url.origin}/cards?${new URLSearchParams({ q, stores, limit: String(limit) })}`;
+}
+
 // GET /cards?q=<text>&stores=<ids>&limit=<n>: product cards as a plain HTML page.
 export async function cardsPage(url: URL): Promise<Response> {
     const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
@@ -51,7 +72,7 @@ function card(product: Product, cheapest: boolean): string {
     const listPrice = product.list_price_cents ? `<s>${pesos(product.list_price_cents)}</s>` : '';
     return `<article class="card" style="--store:${store.color}">
 <span class="store">${escapeHtml(store.name)}</span>
-${cheapest ? '<span class="best">Más barato</span>' : ''}
+${cheapest ? '<span class="best">Menor precio</span>' : ''}
 ${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="noimg"></div>'}
 <h2>${escapeHtml(product.name)}</h2>
 <p class="brand">${escapeHtml(product.brand ?? '')}${product.package ? ` · ${escapeHtml(product.package)}` : ''}</p>
