@@ -1,6 +1,7 @@
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 
+import { cardsPage, cardsUrl } from './cards';
 import { errorMessage } from './http';
 import { comparePrice, listBranches } from './precios-claros';
 import { DEFAULT_STORES, searchProducts, STORE_IDS } from './sources';
@@ -28,14 +29,14 @@ const walletSchema = z.object({
 });
 
 // The factory runs once per request, so keep no state on the server instance.
-const handler = createMcpHandler(() => {
+function buildServer(origin: string): McpServer {
     const server = new McpServer({ name: 'qillay', version: '0.2.0' });
 
     server.registerTool(
         'search_products',
         {
             description:
-                'Search grocery products by text across Argentine supermarkets. Returns products sorted by ascending price, each with store, name, brand, EAN, price_cents (ARS centavos, divide by 100 for pesos), image_url and url. "stores" gives the display name and color of each store. Stores that fail are listed in "errors" and do not affect the rest. Use two or more words ("leche entera 1l"); single words match poorly.',
+                'Search grocery products by text across Argentine supermarkets. Returns products sorted by ascending price, each with store, name, brand, EAN, price_cents (ARS centavos, divide by 100 for pesos), image_url and url. "stores" gives the display name and color of each store. Stores that fail are listed in "errors" and do not affect the rest. Use two or more words ("leche entera 1l"); single words match poorly. "cards_url" is a web page showing these products as cards with photo, price and store color: always give that link to the user.',
             inputSchema: z.object({
                 q: z.string().trim().min(1).describe('Search text in Spanish, for example "leche entera 1l".'),
                 stores: z
@@ -52,7 +53,11 @@ const handler = createMcpHandler(() => {
                 limit: z.number().int().min(1).max(20).default(5).describe('Maximum products per store (max 20).')
             })
         },
-        async ({ q, stores, branch_ids, limit }) => ok(await searchProducts(q, stores ?? DEFAULT_STORES, { limit, branchIds: branch_ids }))
+        async ({ q, stores, branch_ids, limit }) => {
+            const selected = stores ?? DEFAULT_STORES;
+            const result = await searchProducts(q, selected, { limit, branchIds: branch_ids });
+            return ok({ cards_url: cardsUrl(origin, q, selected, limit), ...result });
+        }
     );
 
     server.registerTool(
@@ -114,6 +119,20 @@ const handler = createMcpHandler(() => {
     );
 
     return server;
-});
+}
 
-export default handler;
+// One MCP handler per public origin, so tools can build absolute links to the cards page.
+const handlers = new Map<string, ReturnType<typeof createMcpHandler>>();
+
+export default {
+    async fetch(request: Request): Promise<Response> {
+        const url = new URL(request.url);
+        if (request.method === 'GET' && url.pathname === '/cards') return cardsPage(url);
+        let handler = handlers.get(url.origin);
+        if (!handler) {
+            handler = createMcpHandler(() => buildServer(url.origin));
+            handlers.set(url.origin, handler);
+        }
+        return handler.fetch(request);
+    }
+};
