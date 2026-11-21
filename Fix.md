@@ -8,11 +8,11 @@ Priority: **P1** fix before the demo, **P2** fix if there is time, **P3** known 
 
 | # | Priority | Problem | Where | Status |
 |---|----------|---------|-------|--------|
-| 1 | P1 | Parallel `add_to_cart` calls lose items | `src/cart.ts:53-60` | Done (batch fix; Durable Object not done) |
-| 2 | P1 | `split_payment` without `day` applies every promo, inflating the cashback | `src/wallets.ts:56-60` | Done |
+| 1 | P1 | Parallel `add_to_cart` calls lose items | `src/cart.ts:53-60` | Done upstream (PR #3, batch `items`; Durable Object not done) |
+| 2 | P1 | `split_payment` without `day` applies every promo, inflating the cashback | `src/wallets.ts:56-60` | Done upstream (PR #3, `todayInArgentina`) |
 | 3 | P1 | Sample wallets disagree with the demo checkout page | `src/wallets.ts:19-24`, `demo/checkout.html` | Done |
-| 4 | P2 | Two orders in one conversation get the same `order_id` | `src/index.ts:166` | Done |
-| 5 | P2 | `create_order` ignores the wallet split | `src/index.ts:159-176` | Done |
+| 4 | P2 | Two orders in one conversation get the same `order_id` | `src/index.ts:166` | Done upstream (PR #5, `placeOrder`) |
+| 5 | P2 | `create_order` ignores the wallet split | `src/index.ts:159-176` | Open (my fix was dropped in the merge with PR #5) |
 | 6 | P2 | The "Más barato" badge compares different products and sizes | `src/cards.ts:54`, `src/app.ts` | Done (renamed; per-unit compare not done) |
 | 7 | P2 | `/cards` is an open proxy that fans out to 7 retailers per GET | `src/cards.ts:11-33` | Partial (cache done; rate limit pending) |
 | 8 | P3 | `add_to_cart` trusts the price the model sends | `src/index.ts:105` | Open |
@@ -20,9 +20,11 @@ Priority: **P1** fix before the demo, **P2** fix if there is time, **P3** known 
 | 10 | P3 | Handler cache keyed by request origin grows without bound | `src/index.ts:241-260` | Done |
 | 11 | P3 | No tests for the pure money logic | `src/wallets.ts`, `src/cart.ts` | Done |
 
-None of these fixes is deployed: the Worker on the public URL still runs the old code until someone runs `wrangler deploy`.
+Update after merging `main` (PRs #3 to #5): the team fixed #1, #2 and #4 on their own, and those versions won the merge because they are the deployed ones. My versions of #1, #2, #4 and #5 were dropped; the per-item notes below describe my original fix and stay as history. The tests were rewritten against the team's API (`addItems`, `todayInArgentina`, `placeOrder`): 8 tests, all passing.
 
-How to check: in `mcp-server/`, `pnpm test` (Vitest, 12 tests) and `pnpm typecheck`.
+The fixes still marked Done here and not upstream (#3, #6, #7 cache, #10, #11) are not deployed until someone runs `wrangler deploy`.
+
+How to check: in `mcp-server/`, `pnpm test` and `pnpm typecheck`.
 
 ## P1: fix before the demo
 
