@@ -1,8 +1,8 @@
 import { amount, fetchJson, isRecord, records, text, type Json } from './http';
-import { listPrice, type Product } from './product';
+import { cents, listPrice, type Product } from './product';
 
 export interface VtexStore {
-    fuente: string;
+    id: string;
     base: string;
     // Jumbo, Disco and Vea report a ListPrice unrelated to the shelf price, so it is ignored there.
     trustListPrice: boolean;
@@ -13,7 +13,7 @@ export async function searchVtexCatalog(store: VtexStore, q: string, limit: numb
     // Not URLSearchParams: it encodes spaces as "+", which this API rejects with HTTP 400.
     const query = `ft=${encodeURIComponent(q)}&_from=0&_to=${limit - 1}`;
     const data = await fetchJson(`${store.base}/api/catalog_system/pub/products/search?${query}`);
-    if (!Array.isArray(data)) throw new Error('respuesta con formato inesperado');
+    if (!Array.isArray(data)) throw new Error('unexpected response shape');
     return toProducts(store, data);
 }
 
@@ -21,29 +21,29 @@ export async function searchVtexCatalog(store: VtexStore, q: string, limit: numb
 export async function searchVtexIntelligent(store: VtexStore, q: string, limit: number): Promise<Product[]> {
     const params = new URLSearchParams({ query: q, count: String(limit), page: '1' });
     const data = await fetchJson(`${store.base}/api/io/_v/api/intelligent-search/product_search?${params}`);
-    if (!isRecord(data) || !Array.isArray(data.products)) throw new Error('respuesta con formato inesperado');
+    if (!isRecord(data) || !Array.isArray(data.products)) throw new Error('unexpected response shape');
     return toProducts(store, data.products);
 }
 
 function toProducts(store: VtexStore, raw: unknown[]): Product[] {
     return records(raw).flatMap(product => {
-        const nombre = text(product.productName);
-        if (!nombre) return [];
+        const name = text(product.productName);
+        if (!name) return [];
         const sku = records(product.items)[0] ?? {};
         const offer = firstOffer(sku);
-        const precio = amount(offer.Price);
+        const price = amount(offer.Price);
         const multiplier = amount(sku.unitMultiplier);
         return [
             {
-                fuente: store.fuente,
-                nombre,
-                marca: text(product.brand),
+                store: store.id,
+                name,
+                brand: text(product.brand),
                 ean: text(sku.ean),
-                precio,
-                precio_lista: store.trustListPrice ? listPrice(precio, amount(offer.ListPrice)) : undefined,
+                price_cents: cents(price),
+                list_price_cents: store.trustListPrice ? cents(listPrice(price, amount(offer.ListPrice))) : undefined,
                 // Only wholesale packs carry information here; retail SKUs are 1 "un".
-                presentacion:
-                    multiplier && multiplier !== 1 ? `x${multiplier} ${text(sku.measurementUnit) ?? 'un'}` : undefined,
+                package: multiplier && multiplier !== 1 ? `x${multiplier} ${text(sku.measurementUnit) ?? 'un'}` : undefined,
+                image_url: text(records(sku.images)[0]?.imageUrl),
                 url: productUrl(store.base, text(product.link))
             }
         ];

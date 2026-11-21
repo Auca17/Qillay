@@ -14,7 +14,7 @@ export async function fetchJson(url: string): Promise<unknown> {
         return await response.json();
     } catch (error) {
         if (isTimeout(error)) throw error;
-        throw new Error('la respuesta no es JSON');
+        throw new Error('response is not JSON');
     }
 }
 
@@ -23,7 +23,7 @@ function isTimeout(error: unknown): boolean {
 }
 
 export function errorMessage(error: unknown): string {
-    if (isTimeout(error)) return `sin respuesta en ${TIMEOUT_MS / 1000} s`;
+    if (isTimeout(error)) return `no response in ${TIMEOUT_MS / 1000} s`;
     return error instanceof Error ? error.message : String(error);
 }
 

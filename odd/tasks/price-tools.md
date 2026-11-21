@@ -54,3 +54,11 @@ Test-first exception: no test runner exists and results depend on live third-par
 ## Next step
 
 User connects the server in Grok and reports the result. Pending: native review of `4739d9c..e50b352` (skipped on 2026-11-21, user asked to keep it simple with under two hours left); Carrefour returns 403; endpoint has no auth.
+
+## Follow-up: align with the team CLAUDE.md (2026-11-21)
+
+- [x] T4 — English tool names and fields, integer centavos, product image, store display colors. Route: inline (user asked to keep it simple, under two hours left).
+- [x] T5 — `list_wallets` (sample data) and `split_payment`. Route: inline.
+- Dropped at the user's request: `compare_basket`. Not built: `suggest_substitutions`, `plan_shopping`, `create_order`, `check_offer`, `set_wallet`.
+- Evidence: all five tools called on the deployed URL (Worker version `1d38864d`); search returned 21 products, all with image; split of ARS 60,000 on a Wednesday gave 12,000 + 2,000 cashback, matching a hand calculation.
+- Pending: native review skipped; no automated tests; store colors are approximations; wallet rules are illustrative.

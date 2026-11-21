@@ -1,86 +1,85 @@
 import { amount, fetchJson, isRecord, records, text, type Json } from './http';
-import { byPrice, type Product } from './product';
+import { byPrice, cents, type Product } from './product';
 
-// Field names below follow the public Precios Claros API; they could not be checked against a
-// live response because the endpoint answered 403 while this was written.
+// Precios Claros answers 403 to some networks (seen from a home connection) and 200 from Workers.
 const BASE = 'https://d3e6htiiul5ek9.cloudfront.net/prod';
 
 export interface Branch {
     id?: string;
-    cadena?: string;
-    sucursal?: string;
-    direccion?: string;
-    localidad?: string;
-    provincia?: string;
-    distancia_km?: number;
+    chain?: string;
+    branch?: string;
+    address?: string;
+    city?: string;
+    province?: string;
+    distance_km?: number;
 }
 
 export interface BranchPrice extends Branch {
-    precio?: number;
-    precio_promo?: number;
+    price_cents?: number;
+    promo_price_cents?: number;
 }
 
 export interface PriceComparison {
-    producto?: Product;
-    sucursales: BranchPrice[];
+    product?: Product;
+    branches: BranchPrice[];
 }
 
 export async function listBranches(lat: number, lng: number, limit: number): Promise<Branch[]> {
     const params = new URLSearchParams({ lat: String(lat), lng: String(lng), limit: String(limit) });
     const data = await getObject(`/sucursales?${params}`);
-    return records(data.sucursales).map(raw => ({ ...toBranch(raw), distancia_km: distance(raw.distanciaNumero) }));
+    return records(data.sucursales).map(raw => ({ ...toBranch(raw), distance_km: distance(raw.distanciaNumero) }));
 }
 
-// `precio` is the lowest price among the given branches.
-export async function searchPreciosClaros(q: string, sucursales: string, limit: number): Promise<Product[]> {
-    const params = new URLSearchParams({ string: q, array_sucursales: sucursales, offset: '0', limit: String(limit) });
+// `price_cents` is the lowest price among the given branches.
+export async function searchPreciosClaros(q: string, branchIds: string, limit: number): Promise<Product[]> {
+    const params = new URLSearchParams({ string: q, array_sucursales: branchIds, offset: '0', limit: String(limit) });
     const data = await getObject(`/productos?${params}`);
     return records(data.productos).flatMap(raw => toProduct(raw, amount(raw.precioMin)));
 }
 
-export async function comparePrice(ean: string, sucursales: string): Promise<PriceComparison> {
-    const params = new URLSearchParams({ id_producto: ean, array_sucursales: sucursales, limit: '30' });
+export async function comparePrice(ean: string, branchIds: string): Promise<PriceComparison> {
+    const params = new URLSearchParams({ id_producto: ean, array_sucursales: branchIds, limit: '30' });
     const data = await getObject(`/producto?${params}`);
     const branches = records(data.sucursales).map(raw => {
         const prices = isRecord(raw.preciosProducto) ? raw.preciosProducto : {};
         const promo = isRecord(prices.promo1) ? amount(prices.promo1.precio) : undefined;
-        return { ...toBranch(raw), precio: amount(prices.precioLista), precio_promo: promo };
+        return { ...toBranch(raw), price_cents: cents(amount(prices.precioLista)), promo_price_cents: cents(promo) };
     });
     return {
-        producto: isRecord(data.producto) ? toProduct(data.producto, undefined)[0] : undefined,
+        product: isRecord(data.producto) ? toProduct(data.producto, undefined)[0] : undefined,
         // Branches that do not carry the product come back without a price.
-        sucursales: branches.filter(branch => branch.precio !== undefined).sort(byPrice)
+        branches: branches.filter(branch => branch.price_cents !== undefined).sort(byPrice)
     };
 }
 
 async function getObject(path: string): Promise<Json> {
     const data = await fetchJson(`${BASE}${path}`);
-    if (!isRecord(data)) throw new Error('respuesta con formato inesperado');
+    if (!isRecord(data)) throw new Error('unexpected response shape');
     return data;
 }
 
 function toBranch(raw: Json): Branch {
     return {
         id: text(raw.id),
-        cadena: text(raw.banderaDescripcion) ?? text(raw.comercioRazonSocial),
-        sucursal: text(raw.sucursalNombre),
-        direccion: text(raw.direccion),
-        localidad: text(raw.localidad),
-        provincia: text(raw.provincia)
+        chain: text(raw.banderaDescripcion) ?? text(raw.comercioRazonSocial),
+        branch: text(raw.sucursalNombre),
+        address: text(raw.direccion),
+        city: text(raw.localidad),
+        province: text(raw.provincia)
     };
 }
 
-function toProduct(raw: Json, precio: number | undefined): Product[] {
-    const nombre = text(raw.nombre);
-    if (!nombre) return [];
+function toProduct(raw: Json, price: number | undefined): Product[] {
+    const name = text(raw.nombre);
+    if (!name) return [];
     return [
         {
-            fuente: 'precios_claros',
-            nombre,
-            marca: text(raw.marca),
+            store: 'precios_claros',
+            name,
+            brand: text(raw.marca),
             ean: text(raw.id),
-            precio,
-            presentacion: text(raw.presentacion)
+            price_cents: cents(price),
+            package: text(raw.presentacion)
         }
     ];
 }

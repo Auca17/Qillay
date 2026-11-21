@@ -1,5 +1,5 @@
 import { amount, fetchJson, isRecord, records, text, type Json } from './http';
-import { listPrice, type Product } from './product';
+import { cents, listPrice, type Product } from './product';
 
 const BASE = 'https://www.coto.com.ar';
 
@@ -8,7 +8,7 @@ export async function searchCoto(q: string, limit: number): Promise<Product[]> {
     const params = new URLSearchParams({ Ntt: q, format: 'json', Nrpp: String(limit) });
     const data = await fetchJson(`${BASE}/sitios/cdigi/categoria?${params}`);
     const page = isRecord(data) ? records(data.contents)[0] : undefined;
-    if (!page) throw new Error('respuesta con formato inesperado');
+    if (!page) throw new Error('unexpected response shape');
     // A search without matches has no results list.
     const results = records(page.Main)
         .flatMap(slot => records(slot.contents))
@@ -20,17 +20,18 @@ function toProduct(group: Json): Product[] {
     // Each result groups one product; its first inner record holds the SKU attributes.
     const sku = records(group.records)[0];
     const attributes = sku && isRecord(sku.attributes) ? sku.attributes : undefined;
-    const nombre = attributes && first(attributes['product.displayName']);
-    if (!attributes || !nombre) return [];
-    const precio = amount(first(attributes['sku.activePrice']));
+    const name = attributes && first(attributes['product.displayName']);
+    if (!attributes || !name) return [];
+    const price = amount(first(attributes['sku.activePrice']));
     return [
         {
-            fuente: 'coto',
-            nombre,
-            marca: first(attributes['product.brand']),
+            store: 'coto',
+            name,
+            brand: first(attributes['product.brand']),
             ean: first(attributes['product.eanPrincipal']),
-            precio,
-            precio_lista: listPrice(precio, amount(first(attributes['sku.referencePrice']))),
+            price_cents: cents(price),
+            list_price_cents: cents(listPrice(price, amount(first(attributes['sku.referencePrice'])))),
+            image_url: first(attributes['product.mediumImage.url']),
             url: productUrl(group.detailsAction)
         }
     ];
